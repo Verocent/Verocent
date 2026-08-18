@@ -1,19 +1,155 @@
+/* globals.css - Verocent Pure Essence ERP */
+/* Responsive: Mobile 320px → Tablet 768px → Desktop 1024px+ */
+
 * {
   box-sizing: border-box;
   padding: 0;
   margin: 0;
 }
 
-html,
-body {
+html, body {
   max-width: 100vw;
   overflow-x: hidden;
   font-family: Arial, Helvetica, sans-serif;
   background: #FAFAF7;
   color: #1A1A1A;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: #1F6F43; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #165C35; }
+
+/* ── Tables - scroll on mobile ── */
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* ── Loading spinner animation ── */
+@keyframes spin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ── Mobile: up to 767px ── */
+@media (max-width: 767px) {
+  /* KPI cards stack vertically */
+  .kpi-row {
+    flex-direction: column !important;
+  }
+
+  /* Cards take full width */
+  .card-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Form grids go single column */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Hide some table columns on very small screens */
+  .hide-mobile {
+    display: none !important;
+  }
+
+  /* Smaller font on mobile tables */
+  table {
+    font-size: 12px !important;
+  }
+
+  td, th {
+    padding: 7px 8px !important;
+  }
+
+  /* Buttons smaller on mobile */
+  button {
+    font-size: 12px !important;
+  }
+
+  /* Hero numbers smaller */
+  .kpi-value {
+    font-size: 18px !important;
+  }
+}
+
+/* ── Tablet: 768px to 1023px ── */
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* 2-column KPI on tablet */
+  .kpi-row {
+    flex-wrap: wrap;
+  }
+
+  .kpi-row > * {
+    min-width: calc(50% - 8px) !important;
+  }
+
+  /* 2-col card grid */
+  .card-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+
+/* ── Desktop: 1024px+ ── */
+@media (min-width: 1024px) {
+  /* Full KPI row */
+  .kpi-row > * {
+    min-width: 130px;
+  }
+}
+
+/* ── Print styles (for invoices) ── */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
+
+/* ── Focus styles for accessibility ── */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid #1F6F43;
+  outline-offset: 2px;
+}
+
+/* ── Smooth transitions ── */
+button {
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ── Toast notification (future use) ── */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #1F6F43;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  z-index: 9999;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
 }
