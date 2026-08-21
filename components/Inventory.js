@@ -52,6 +52,30 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
   };
 
   // ── FINISHED GOODS ─────────────────────────────
+    // ── FINISHED GOODS EDIT & DELETE ──────────────────
+  const saveFG = async () => {
+    if (!form.name || !form.price) return alert('Product name and price are required.');
+    setSaving(true);
+    const payload = {
+      ...form,
+      cost: Number(form.cost)||0,
+      price: Number(form.price)||0,
+      stock: Number(form.stock)||0,
+      reorder: Number(form.reorder)||20,
+    };
+    try {
+      await db.updateProduct(form.id, payload);
+      setProducts(prev => prev.map(p => p.id===form.id ? {...payload, id:form.id} : p));
+      setModal(null);
+    } catch(e) { alert('Error: '+e.message); }
+    setSaving(false);
+  };
+
+  const delFG = async (id, name) => {
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    await db.deleteProduct(id).catch(()=>{});
+    setProducts(prev => prev.filter(p => p.id !== id));
+  };
   const adjustStock = async (p, type) => {
     const q = Number(prompt(`Enter quantity to ${type==='add'?'add to':'remove from'} ${p.name} stock:`));
     if (!q || q<=0) return;
@@ -139,11 +163,14 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
       )}
 
       {/* ── FINISHED GOODS ── */}
+            {/* ── FINISHED GOODS ── */}
       {tab==='finished' && (
         <Card title='Finished Goods Inventory' icon='📦'
-          actions={[<Btn key='e' small color='blue' onClick={()=>exportCSV(products,'finished-goods.csv')}>⬇️ Export</Btn>]}>
+          actions={[
+            <Btn key='e' small color='blue' onClick={()=>exportCSV(products,'finished-goods.csv')}>⬇️ Export</Btn>,
+          ]}>
           <Table
-            headers={['Product','Size','Cost Price','Sell Price','In Stock','Stock Value','Reorder At','Status','Update Stock']}
+            headers={['Product','Size','Cost Price','Sell Price','In Stock','Stock Value','Reorder At','Status','Actions']}
             rows={products.map(p=>[
               <span style={{fontWeight:700,color:'#165C35'}}>{p.name}</span>,
               p.size||'—', fmt(p.cost), fmt(p.price),
@@ -151,9 +178,11 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
               <span style={{fontWeight:700,color:'#165C35'}}>{fmt((p.stock||0)*(p.price||0))}</span>,
               p.reorder,
               p.stock<=0?<Badge label='🚨 OUT' color='red'/>:p.stock<=p.reorder?<Badge label='⚠️ LOW' color='amber'/>:<Badge label='✅ OK' color='green'/>,
-              <div style={{display:'flex',gap:6}}>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                 <Btn small color='green' onClick={()=>adjustStock(p,'add')}>+ Add Stock</Btn>
                 <Btn small color='amber' onClick={()=>adjustStock(p,'remove')}>- Remove</Btn>
+                <Btn small color='blue'  onClick={()=>{setForm({...p,cost:String(p.cost),price:String(p.price),stock:String(p.stock),reorder:String(p.reorder)});setModal('edit-fg');}}>✏️ Edit</Btn>
+                <Btn small color='red'   onClick={()=>delFG(p.id,p.name)}>🗑 Del</Btn>
               </div>,
             ])}
           />
@@ -231,6 +260,35 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
         </Modal>
       )}
 
+            {/* Edit Finished Good Modal */}
+      {modal==='edit-fg'&&(
+        <Modal title='✏️ Edit Finished Good' onClose={()=>setModal(null)}>
+          <div style={{background:'#EBF5FB',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13,fontFamily:'sans-serif',color:'#1A56DB'}}>
+            ✏️ Editing: <strong>{form.name}</strong> — all changes save to both Inventory and Products.
+          </div>
+          <Grid cols={2}>
+            <Input label='Product Name *' value={form.name} onChange={v=>setForm(p=>({...p,name:v}))}/>
+            <Input label='Product Code'   value={form.code} onChange={v=>setForm(p=>({...p,code:v}))}/>
+            <Input label='Batch Prefix'   value={form.prefix} onChange={v=>setForm(p=>({...p,prefix:v}))}/>
+            <Input label='Pack Size'      value={form.size}   onChange={v=>setForm(p=>({...p,size:v}))} placeholder='e.g. 250g'/>
+            <Input label='Cost Price (₦)' type='number' value={form.cost}    onChange={v=>setForm(p=>({...p,cost:v}))}/>
+            <Input label='Sell Price (₦)' type='number' value={form.price}   onChange={v=>setForm(p=>({...p,price:v}))}/>
+            <Input label='Current Stock'  type='number' value={form.stock}   onChange={v=>setForm(p=>({...p,stock:v}))}/>
+            <Input label='Reorder Point'  type='number' value={form.reorder} onChange={v=>setForm(p=>({...p,reorder:v}))}/>
+            <Select label='Status' value={form.status} onChange={v=>setForm(p=>({...p,status:v}))} options={['Active','Inactive','Discontinued']}/>
+          </Grid>
+          {form.cost&&form.price&&(
+            <div style={{background:'#FDF6E3',borderRadius:8,padding:'10px 14px',marginBottom:12,fontSize:13,fontFamily:'sans-serif'}}>
+              Profit/unit: <strong style={{color:'#165C35'}}>{fmt(Number(form.price)-Number(form.cost))}</strong>
+              {' '}| Margin: <strong style={{color:'#165C35'}}>{Number(form.price)>0?(((Number(form.price)-Number(form.cost))/Number(form.price))*100).toFixed(1)+'%':'—'}</strong>
+            </div>
+          )}
+          <div style={{display:'flex',gap:10}}>
+            <Btn onClick={saveFG} color='green' disabled={saving}>{saving?'Saving…':'Save Changes'}</Btn>
+            <Btn onClick={()=>setModal(null)} color='grey' outline>Cancel</Btn>
+          </div>
+        </Modal>
+      )}
       {/* Add/Edit Supplier */}
       {(modal==='add-sup'||modal==='edit-sup')&&(
         <Modal title={modal==='add-sup'?'Add Supplier':'Edit Supplier'} onClose={()=>setModal(null)}>
