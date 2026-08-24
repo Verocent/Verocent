@@ -16,12 +16,11 @@ import AuditLog    from '@/components/AuditLog';
 import { canAccess, getModules } from '@/lib/access';
 
 export default function Home() {
-  // ── Auth state ────────────────────────────────────────
-  const [currentUser,   setCurrentUser]   = useState(null);
-  const [authChecked,   setAuthChecked]   = useState(false);
-  const [activeModule,  setActiveModule]  = useState('dashboard');
+  const [currentUser,  setCurrentUser]  = useState(null);
+  const [authChecked,  setAuthChecked]  = useState(false);
+  const [activeModule, setActiveModule] = useState('dashboard');
+  const [loading,      setLoading]      = useState(false);
 
-  // ── Data state ────────────────────────────────────────
   const [products,     setProducts]     = useState([]);
   const [rawMaterials, setRawMaterials] = useState([]);
   const [suppliers,    setSuppliers]    = useState([]);
@@ -31,110 +30,76 @@ export default function Home() {
   const [staff,        setStaff]        = useState([]);
   const [production,   setProduction]   = useState([]);
   const [compliance,   setCompliance]   = useState([]);
-  const [loading,      setLoading]      = useState(true);
 
-  // ── Check if already logged in ────────────────────────
+  // Check existing session on load
   useEffect(() => {
-    checkSession();
+    (async () => {
+      try {
+        const { supabase } = await import('@/lib/supabase');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.email) {
+          const { data: u } = await supabase
+            .from('staff_users').select('*')
+            .eq('email', session.user.email.toLowerCase()).single();
+          if (u?.is_active) {
+            setCurrentUser(u);
+            await loadData();
+          } else {
+            await supabase.auth.signOut({ scope: 'local' });
+          }
+        }
+      } catch(e) { console.error(e); }
+      setAuthChecked(true);
+    })();
   }, []);
 
-  const checkSession = async () => {
+  const loadData = async () => {
+    setLoading(true);
     try {
-      const { supabase } = await import('@/lib/supabase');
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        // Get their staff profile
-        const { data: staffUser } = await supabase
-          .from('staff_users')
-          .select('*')
-          .eq('email', session.user.email)
-          .single();
-
-        if (staffUser?.is_active) {
-          setCurrentUser(staffUser);
-          await loadData();
-        }
-      }
-    } catch(e) {
-      console.error('Session check error:', e);
-    }
-    setAuthChecked(true);
+      const { db } = await import('@/lib/supabase');
+      const [p,rm,sup,s,c,e,st,prod,comp] = await Promise.all([
+        db.getProducts(), db.getRawMaterials(), db.getSuppliers(),
+        db.getSales(), db.getCustomers(), db.getExpenses(),
+        db.getStaff(), db.getProduction(), db.getCompliance(),
+      ]);
+      setProducts(p||[]); setRawMaterials(rm||[]); setSuppliers(sup||[]);
+      setSales(s||[]); setCustomers(c||[]); setExpenses(e||[]);
+      setStaff(st||[]); setProduction(prod||[]); setCompliance(comp||[]);
+    } catch(e) { console.error(e); }
     setLoading(false);
   };
 
-  // ── Handle successful login ───────────────────────────
   const handleLogin = async (staffUser) => {
     setCurrentUser(staffUser);
     setActiveModule('dashboard');
     await loadData();
   };
 
-  // ── Handle logout ─────────────────────────────────────
   const handleLogout = async () => {
     try {
       const { supabase } = await import('@/lib/supabase');
-
-      // Log the logout
       if (currentUser) {
         await supabase.from('audit_logs').insert({
-          user_email:  currentUser.email,
-          user_name:   currentUser.full_name,
-          action:      'LOGOUT',
-          module:      'Authentication',
-          description: `${currentUser.full_name} logged out`,
+          user_email: currentUser.email, user_name: currentUser.full_name,
+          action:'LOGOUT', module:'Authentication',
+          description:`${currentUser.full_name} signed out`,
           device: navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop',
-          status: 'Success',
-        });
+          status:'Success',
+        }).catch(()=>{});
       }
-
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope:'local' });
     } catch(e) { console.error(e); }
-
-    setCurrentUser(null);
-    setProducts([]); setSales([]); setExpenses([]);
-    setStaff([]); setCustomers([]); setRawMaterials([]);
-    setSuppliers([]); setProduction([]); setCompliance([]);
+    // Clear everything
+    setCurrentUser(null); setActiveModule('dashboard');
+    setProducts([]); setRawMaterials([]); setSuppliers([]);
+    setSales([]); setCustomers([]); setExpenses([]);
+    setStaff([]); setProduction([]); setCompliance([]);
   };
 
-  // ── Handle module change (with access check) ──────────
+  // Only allow navigation to permitted modules
   const handleModuleChange = (moduleId) => {
-    if (!canAccess(currentUser, moduleId)) {
-      alert(`You do not have access to the ${moduleId} module. Please contact Veronica.`);
-      return;
-    }
+    if (!canAccess(currentUser, moduleId)) return;
     setActiveModule(moduleId);
-  };
-
-  // ── Load all data from Supabase ───────────────────────
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const { db } = await import('@/lib/supabase');
-      const [p, rm, sup, s, c, e, st, prod, comp] = await Promise.all([
-        db.getProducts(),
-        db.getRawMaterials(),
-        db.getSuppliers(),
-        db.getSales(),
-        db.getCustomers(),
-        db.getExpenses(),
-        db.getStaff(),
-        db.getProduction(),
-        db.getCompliance(),
-      ]);
-      setProducts(p||[]);
-      setRawMaterials(rm||[]);
-      setSuppliers(sup||[]);
-      setSales(s||[]);
-      setCustomers(c||[]);
-      setExpenses(e||[]);
-      setStaff(st||[]);
-      setProduction(prod||[]);
-      setCompliance(comp||[]);
-    } catch(e) {
-      console.error('Error loading data:', e);
-    }
-    setLoading(false);
   };
 
   const globalProps = {
@@ -145,73 +110,46 @@ export default function Home() {
     compliance, setCompliance, currentUser,
   };
 
-  // ── Render module based on access ─────────────────────
   const renderModule = () => {
-    // Access denied check
+    // Block access if module not permitted
     if (!canAccess(currentUser, activeModule)) {
-      return (
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',
-          justifyContent:'center',height:'60vh',fontFamily:'sans-serif',textAlign:'center',gap:16}}>
-          <div style={{fontSize:60}}>🔒</div>
-          <div style={{fontSize:20,fontWeight:700,color:'#C0392B'}}>Access Restricted</div>
-          <div style={{fontSize:14,color:'#888',maxWidth:300}}>
-            You do not have permission to view this module. Please contact Veronica (Founder) to request access.
-          </div>
-          <button onClick={()=>setActiveModule('dashboard')}
-            style={{background:'#1F6F43',color:'#fff',border:'none',borderRadius:8,
-              padding:'10px 24px',fontWeight:700,fontSize:14,cursor:'pointer',fontFamily:'sans-serif'}}>
-            ← Go to Dashboard
-          </button>
-        </div>
-      );
+      setActiveModule('dashboard');
+      return null;
     }
-
     if (loading) return (
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',
-        height:'60vh',fontFamily:'sans-serif',flexDirection:'column',gap:16}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh',flexDirection:'column',gap:16,fontFamily:'sans-serif'}}>
         <div style={{fontSize:40}}>🌿</div>
-        <div style={{fontSize:18,fontWeight:700,color:'#1F6F43'}}>Loading...</div>
-        <div style={{fontSize:13,color:'#888'}}>Fetching your data from database</div>
+        <div style={{fontSize:16,fontWeight:700,color:'#1F6F43'}}>Loading...</div>
       </div>
     );
-
     switch(activeModule) {
-      case 'dashboard':   return <Dashboard   {...globalProps}/>;
-      case 'products':    return <Products    {...globalProps}/>;
-      case 'production':  return <Production  {...globalProps}/>;
-      case 'inventory':   return <Inventory   {...globalProps}/>;
-      case 'sales':       return <Sales       {...globalProps}/>;
-      case 'finance':     return <Finance     {...globalProps}/>;
-      case 'compliance':  return <Compliance  {...globalProps}/>;
-      case 'staff':       return <StaffAccess {...globalProps}/>;
-      case 'reports':     return <Reports     {...globalProps}/>;
-      case 'audit':       return <AuditLog    currentUser={currentUser}/>;
-      default:            return <Dashboard   {...globalProps}/>;
+      case 'dashboard':  return <Dashboard   {...globalProps}/>;
+      case 'products':   return <Products    {...globalProps}/>;
+      case 'production': return <Production  {...globalProps}/>;
+      case 'inventory':  return <Inventory   {...globalProps}/>;
+      case 'sales':      return <Sales       {...globalProps}/>;
+      case 'finance':    return <Finance     {...globalProps}/>;
+      case 'compliance': return <Compliance  {...globalProps}/>;
+      case 'staff':      return <StaffAccess {...globalProps}/>;
+      case 'reports':    return <Reports     {...globalProps}/>;
+      case 'audit':      return <AuditLog    currentUser={currentUser}/>;
+      default:           return <Dashboard   {...globalProps}/>;
     }
   };
 
-  // ── Show loading while checking session ───────────────
-  if (!authChecked) {
-    return (
-      <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#1B2631,#165C35)',
-        display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}}>
-        <div style={{fontSize:50}}>🌿</div>
-        <div style={{color:'#fff',fontSize:18,fontWeight:700,fontFamily:'sans-serif'}}>
-          Verocent Pure Essence ERP
-        </div>
-        <div style={{color:'rgba(255,255,255,0.6)',fontSize:13,fontFamily:'sans-serif'}}>
-          Loading...
-        </div>
-      </div>
-    );
-  }
+  if (!authChecked) return (
+    <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#1B2631,#165C35)',
+      display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}}>
+      <div style={{fontSize:48}}>🌿</div>
+      <div style={{color:'#fff',fontSize:18,fontWeight:700,fontFamily:'sans-serif'}}>Verocent Pure Essence ERP</div>
+    </div>
+  );
 
-  // ── Show login if not authenticated ───────────────────
-  if (!currentUser) {
-    return <LoginPage onLogin={handleLogin}/>;
-  }
+  if (!currentUser) return <LoginPage onLogin={handleLogin}/>;
 
-  // ── Show ERP if authenticated ─────────────────────────
+  // Get ONLY the modules this user is allowed to see
+  const allowedModules = getModules(currentUser);
+
   return (
     <Layout
       activeModule={activeModule}
@@ -219,7 +157,7 @@ export default function Home() {
       data={globalProps}
       currentUser={currentUser}
       onLogout={handleLogout}
-      allowedModules={getModules(currentUser)}
+      allowedModules={allowedModules}
     >
       {renderModule()}
     </Layout>
