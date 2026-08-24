@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
+
+import { useState } from 'react';
 import LoginPage   from '@/components/LoginPage';
 import Layout      from '@/components/Layout';
 import Dashboard   from '@/components/Dashboard';
@@ -16,7 +17,6 @@ import { canAccess, getModules } from '@/lib/access';
 
 export default function Home() {
   const [currentUser,  setCurrentUser]  = useState(null);
-  const [authChecked,  setAuthChecked]  = useState(false);
   const [activeModule, setActiveModule] = useState('dashboard');
   const [loading,      setLoading]      = useState(false);
   const [products,     setProducts]     = useState([]);
@@ -29,26 +29,8 @@ export default function Home() {
   const [production,   setProduction]   = useState([]);
   const [compliance,   setCompliance]   = useState([]);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { supabase } = await import('@/lib/supabase');
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user?.email) {
-          const { data: u } = await supabase
-            .from('staff_users').select('*')
-            .eq('email', session.user.email.toLowerCase()).single();
-          if (u?.is_active) {
-            setCurrentUser(u);
-            await loadData();
-          } else {
-            await supabase.auth.signOut({ scope: 'local' });
-          }
-        }
-      } catch(e) { console.error(e); }
-      setAuthChecked(true);
-    })();
-  }, []);
+  // No session check — always show login first
+  // User must log in every time they open the app
 
   const loadData = async () => {
     setLoading(true);
@@ -75,17 +57,6 @@ export default function Home() {
   const handleLogout = async () => {
     try {
       const { supabase } = await import('@/lib/supabase');
-      if (currentUser) {
-        await supabase.from('audit_logs').insert({
-          user_email: currentUser.email,
-          user_name: currentUser.full_name,
-          action: 'LOGOUT',
-          module: 'Authentication',
-          description: `${currentUser.full_name} signed out`,
-          device: navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop',
-          status: 'Success',
-        }).catch(()=>{});
-      }
       await supabase.auth.signOut({ scope: 'local' });
     } catch(e) { console.error(e); }
     setCurrentUser(null);
@@ -109,15 +80,11 @@ export default function Home() {
   };
 
   const renderModule = () => {
-    if (!canAccess(currentUser, activeModule)) {
-      setActiveModule('dashboard');
-      return null;
-    }
     if (loading) return (
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',
         height:'60vh',flexDirection:'column',gap:16,fontFamily:'sans-serif'}}>
         <div style={{fontSize:40}}>🌿</div>
-        <div style={{fontSize:16,fontWeight:700,color:'#1F6F43'}}>Loading...</div>
+        <div style={{fontSize:16,fontWeight:700,color:'#1F6F43'}}>Loading your data...</div>
       </div>
     );
     switch(activeModule) {
@@ -135,19 +102,10 @@ export default function Home() {
     }
   };
 
-  if (!authChecked) return (
-    <div style={{minHeight:'100vh',
-      background:'linear-gradient(135deg,#1B2631 0%,#165C35 100%)',
-      display:'flex',alignItems:'center',justifyContent:'center',
-      flexDirection:'column',gap:16}}>
-      <div style={{fontSize:48}}>🌿</div>
-      <div style={{color:'#fff',fontSize:18,fontWeight:700,fontFamily:'sans-serif'}}>
-        Verocent Pure Essence ERP
-      </div>
-    </div>
-  );
-
-  if (!currentUser) return <LoginPage onLogin={handleLogin}/>;
+  // Always show login if no user
+  if (!currentUser) {
+    return <LoginPage onLogin={handleLogin}/>;
+  }
 
   return (
     <Layout
