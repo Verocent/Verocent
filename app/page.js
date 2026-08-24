@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 import LoginPage   from '@/components/LoginPage';
 import Layout      from '@/components/Layout';
@@ -20,7 +19,6 @@ export default function Home() {
   const [authChecked,  setAuthChecked]  = useState(false);
   const [activeModule, setActiveModule] = useState('dashboard');
   const [loading,      setLoading]      = useState(false);
-
   const [products,     setProducts]     = useState([]);
   const [rawMaterials, setRawMaterials] = useState([]);
   const [suppliers,    setSuppliers]    = useState([]);
@@ -31,7 +29,6 @@ export default function Home() {
   const [production,   setProduction]   = useState([]);
   const [compliance,   setCompliance]   = useState([]);
 
-  // Check existing session on load
   useEffect(() => {
     (async () => {
       try {
@@ -80,23 +77,24 @@ export default function Home() {
       const { supabase } = await import('@/lib/supabase');
       if (currentUser) {
         await supabase.from('audit_logs').insert({
-          user_email: currentUser.email, user_name: currentUser.full_name,
-          action:'LOGOUT', module:'Authentication',
-          description:`${currentUser.full_name} signed out`,
+          user_email: currentUser.email,
+          user_name: currentUser.full_name,
+          action: 'LOGOUT',
+          module: 'Authentication',
+          description: `${currentUser.full_name} signed out`,
           device: navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop',
-          status:'Success',
+          status: 'Success',
         }).catch(()=>{});
       }
-      await supabase.auth.signOut({ scope:'local' });
+      await supabase.auth.signOut({ scope: 'local' });
     } catch(e) { console.error(e); }
-    // Clear everything
-    setCurrentUser(null); setActiveModule('dashboard');
+    setCurrentUser(null);
+    setActiveModule('dashboard');
     setProducts([]); setRawMaterials([]); setSuppliers([]);
     setSales([]); setCustomers([]); setExpenses([]);
     setStaff([]); setProduction([]); setCompliance([]);
   };
 
-  // Only allow navigation to permitted modules
   const handleModuleChange = (moduleId) => {
     if (!canAccess(currentUser, moduleId)) return;
     setActiveModule(moduleId);
@@ -111,13 +109,13 @@ export default function Home() {
   };
 
   const renderModule = () => {
-    // Block access if module not permitted
     if (!canAccess(currentUser, activeModule)) {
       setActiveModule('dashboard');
       return null;
     }
     if (loading) return (
-      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh',flexDirection:'column',gap:16,fontFamily:'sans-serif'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',
+        height:'60vh',flexDirection:'column',gap:16,fontFamily:'sans-serif'}}>
         <div style={{fontSize:40}}>🌿</div>
         <div style={{fontSize:16,fontWeight:700,color:'#1F6F43'}}>Loading...</div>
       </div>
@@ -138,17 +136,18 @@ export default function Home() {
   };
 
   if (!authChecked) return (
-    <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#1B2631,#165C35)',
-      display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:16}}>
+    <div style={{minHeight:'100vh',
+      background:'linear-gradient(135deg,#1B2631 0%,#165C35 100%)',
+      display:'flex',alignItems:'center',justifyContent:'center',
+      flexDirection:'column',gap:16}}>
       <div style={{fontSize:48}}>🌿</div>
-      <div style={{color:'#fff',fontSize:18,fontWeight:700,fontFamily:'sans-serif'}}>Verocent Pure Essence ERP</div>
+      <div style={{color:'#fff',fontSize:18,fontWeight:700,fontFamily:'sans-serif'}}>
+        Verocent Pure Essence ERP
+      </div>
     </div>
   );
 
   if (!currentUser) return <LoginPage onLogin={handleLogin}/>;
-
-  // Get ONLY the modules this user is allowed to see
-  const allowedModules = getModules(currentUser);
 
   return (
     <Layout
@@ -157,7 +156,7 @@ export default function Home() {
       data={globalProps}
       currentUser={currentUser}
       onLogout={handleLogout}
-      allowedModules={allowedModules}
+      allowedModules={getModules(currentUser)}
     >
       {renderModule()}
     </Layout>
