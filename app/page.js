@@ -1,24 +1,29 @@
 'use client';
 
-import { useState } from 'react';
-import LoginPage   from '@/components/LoginPage';
-import Layout      from '@/components/Layout';
-import Dashboard   from '@/components/Dashboard';
-import Products    from '@/components/Products';
-import Production  from '@/components/Production';
-import Inventory   from '@/components/Inventory';
-import Sales       from '@/components/Sales';
-import Finance     from '@/components/Finance';
-import Compliance  from '@/components/Compliance';
-import Reports     from '@/components/Reports';
-import StaffAccess from '@/components/StaffAccess';
-import AuditLog    from '@/components/AuditLog';
+import { useState, useEffect } from 'react';
 import { canAccess, getModules } from '@/lib/access';
+
+// Lazy load all modules
+import dynamic from 'next/dynamic';
+const LoginPage   = dynamic(() => import('@/components/LoginPage'),   { ssr: false });
+const Layout      = dynamic(() => import('@/components/Layout'),      { ssr: false });
+const Dashboard   = dynamic(() => import('@/components/Dashboard'),   { ssr: false });
+const Products    = dynamic(() => import('@/components/Products'),    { ssr: false });
+const Production  = dynamic(() => import('@/components/Production'),  { ssr: false });
+const Inventory   = dynamic(() => import('@/components/Inventory'),   { ssr: false });
+const Sales       = dynamic(() => import('@/components/Sales'),       { ssr: false });
+const Finance     = dynamic(() => import('@/components/Finance'),     { ssr: false });
+const Compliance  = dynamic(() => import('@/components/Compliance'),  { ssr: false });
+const Reports     = dynamic(() => import('@/components/Reports'),     { ssr: false });
+const StaffAccess = dynamic(() => import('@/components/StaffAccess'), { ssr: false });
+const AuditLog    = dynamic(() => import('@/components/AuditLog'),    { ssr: false });
 
 export default function Home() {
   const [currentUser,  setCurrentUser]  = useState(null);
   const [activeModule, setActiveModule] = useState('dashboard');
   const [loading,      setLoading]      = useState(false);
+  const [ready,        setReady]        = useState(false);
+
   const [products,     setProducts]     = useState([]);
   const [rawMaterials, setRawMaterials] = useState([]);
   const [suppliers,    setSuppliers]    = useState([]);
@@ -29,8 +34,10 @@ export default function Home() {
   const [production,   setProduction]   = useState([]);
   const [compliance,   setCompliance]   = useState([]);
 
-  // No session check — always show login first
-  // User must log in every time they open the app
+  // Wait for client to be ready — fixes hydration error
+  useEffect(() => {
+    setReady(true);
+  }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -79,12 +86,32 @@ export default function Home() {
     compliance, setCompliance, currentUser,
   };
 
+  // Loading screen while client initialises
+  if (!ready) return (
+    <div style={{
+      minHeight:'100vh',
+      background:'linear-gradient(135deg,#1B2631 0%,#165C35 100%)',
+      display:'flex', alignItems:'center', justifyContent:'center',
+      flexDirection:'column', gap:16, fontFamily:'Arial,sans-serif'
+    }}>
+      <div style={{fontSize:48}}>🌿</div>
+      <div style={{color:'#fff',fontSize:18,fontWeight:700}}>
+        Verocent Pure Essence ERP
+      </div>
+    </div>
+  );
+
+  // Always show login if no user logged in
+  if (!currentUser) {
+    return <LoginPage onLogin={handleLogin}/>;
+  }
+
   const renderModule = () => {
     if (loading) return (
       <div style={{display:'flex',alignItems:'center',justifyContent:'center',
         height:'60vh',flexDirection:'column',gap:16,fontFamily:'sans-serif'}}>
         <div style={{fontSize:40}}>🌿</div>
-        <div style={{fontSize:16,fontWeight:700,color:'#1F6F43'}}>Loading your data...</div>
+        <div style={{fontSize:16,fontWeight:700,color:'#1F6F43'}}>Loading...</div>
       </div>
     );
     switch(activeModule) {
@@ -101,11 +128,6 @@ export default function Home() {
       default:           return <Dashboard   {...globalProps}/>;
     }
   };
-
-  // Always show login if no user
-  if (!currentUser) {
-    return <LoginPage onLogin={handleLogin}/>;
-  }
 
   return (
     <Layout
