@@ -191,7 +191,11 @@ export default function LoginPage({ onLogin }) {
           {/* Help */}
           <div style={{marginTop:20,padding:'12px 16px',background:'#E8F5EE',
             borderRadius:8,fontSize:12,color:'#165C35',textAlign:'center'}}>
-            🌿 First time? Ask <strong>Veronica</strong> to set up your account.
+            🌿 Unable to login? Contact Admin on{' '}
+<a href="https://wa.me/2347036670251" 
+  style={{color:'#1F6F43',fontWeight:700}}>
+  WhatsApp
+</a>
           </div>
         </div>
 
