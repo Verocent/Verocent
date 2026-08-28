@@ -27,10 +27,18 @@ export default function LoginPage({ onLogin }) {
         .single();
 
       if (staffError || !staffUser) {
-        setError('Incorrect email or password. Please try again.');
-        setLoading(false);
-        return;
-      }
+  console.log('LOGIN ERROR:', staffError);
+  console.log('STAFF USER:', staffUser);
+
+  setError(
+    staffError
+      ? `Database error: ${staffError.message}`
+      : 'No matching staff account found.'
+  );
+
+  setLoading(false);
+  return;
+}
 
       await supabase.from('audit_logs').insert({
         user_email:  staffUser.email,
@@ -40,13 +48,18 @@ export default function LoginPage({ onLogin }) {
         description: `${staffUser.full_name} logged in`,
         device:      navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop',
         status:      'Success',
-      }).catch(()=>{});
+      });
 
       onLogin(staffUser);
 
     } catch(err) {
-      setError('Login failed. Please try again.');
-    }
+  console.error('LOGIN EXCEPTION:', err);
+  setError(`Login error: ${err?.message || String(err)}`);
+}
+
+
+
+
     setLoading(false);
   };
 
