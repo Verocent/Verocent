@@ -124,9 +124,9 @@ export default function Home() {
       case 'finance':    return <Finance     {...globalProps}/>;
       case 'compliance': return <Compliance  {...globalProps}/>;
       case 'staff':      return <StaffAccess {...globalProps}/>;
-      case 'documents':  return <Documents   currentUser={currentUser}/>;
       case 'reports':    return <Reports     {...globalProps}/>;
       case 'audit':      return <AuditLog    currentUser={currentUser}/>;
+      case 'documents':  return <Documents   currentUser={currentUser}/>;
       default:           return <Dashboard   {...globalProps}/>;
     }
   };
