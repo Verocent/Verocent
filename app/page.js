@@ -14,6 +14,7 @@ const Inventory   = dynamic(() => import('@/components/Inventory'),   { ssr: fal
 const Sales       = dynamic(() => import('@/components/Sales'),       { ssr: false });
 const Finance     = dynamic(() => import('@/components/Finance'),     { ssr: false });
 const Compliance  = dynamic(() => import('@/components/Compliance'),  { ssr: false });
+const Documents   = dynamic(() => import('@/components/Documents'),   { ssr: false });
 const Reports     = dynamic(() => import('@/components/Reports'),     { ssr: false });
 const StaffAccess = dynamic(() => import('@/components/StaffAccess'), { ssr: false });
 const AuditLog    = dynamic(() => import('@/components/AuditLog'),    { ssr: false });
@@ -123,6 +124,7 @@ export default function Home() {
       case 'finance':    return <Finance     {...globalProps}/>;
       case 'compliance': return <Compliance  {...globalProps}/>;
       case 'staff':      return <StaffAccess {...globalProps}/>;
+      case 'documents':  return <Documents   currentUser={currentUser}/>;
       case 'reports':    return <Reports     {...globalProps}/>;
       case 'audit':      return <AuditLog    currentUser={currentUser}/>;
       default:           return <Dashboard   {...globalProps}/>;
