@@ -169,7 +169,7 @@ const blankReturn = {
   refund_amount:'0', recorded_by:'Veronica', notes:''
 };
 
-export default function Sales({ sales, setSales, customers, setCustomers, products }) {
+export default function Sales({ sales, setSales, customers, setCustomers, products, setProducts }) {
   const [tab,     setTab]     = useState('log');
   const [modal,   setModal]   = useState(null);
   const [form,    setForm]    = useState({});
@@ -195,6 +195,23 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
       if(modal==='add-sale') {
         const row = await db.addSale(payload).catch(()=>null);
         setSales(prev=>[...prev, row||payload]);
+
+        // ── AUTO DEDUCT STOCK ──────────────────────────
+        const soldProduct = products.find(p => p.name === payload.product);
+        if(soldProduct && soldProduct.id) {
+          const newStock = Math.max(0,
+            (Number(soldProduct.stock)||0) - (Number(payload.qty)||1)
+          );
+          await db.updateProduct(soldProduct.id, {
+            ...soldProduct,
+            stock: newStock
+          }).catch(()=>{});
+          setProducts(prev => prev.map(p =>
+            p.id === soldProduct.id ? {...p, stock: newStock} : p
+          ));
+        }
+        // ──────────────────────────────────────────────
+
       } else {
         await db.updateSale(form.id, payload).catch(()=>{});
         setSales(prev=>prev.map(s=>s.id===form.id?payload:s));
