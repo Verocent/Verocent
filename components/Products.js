@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const fmt   = n  => `₦${Number(n||0).toLocaleString()}`;
 const today = () => new Date().toISOString().split('T')[0];
@@ -168,8 +168,31 @@ export default function Products({ products, setProducts }) {
   // Sets state
   const [sets,     setSets]     = useState(DEFAULT_SETS);
   const [setForm,  setSetForm]  = useState(null); // null or set object being edited
+  const [loading,  setLoading]  = useState(true);
 
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  // ── LOAD FROM SUPABASE ON MOUNT ───────────────────────────
+  useEffect(()=>{
+    const load = async () => {
+      try {
+        const { db } = await import('@/lib/supabase');
+        const [dbSets, dbDispatches, dbLocSales] = await Promise.all([
+          db.getSets(),
+          db.getDispatches(),
+          db.getLocationSales(),
+        ]);
+        if(dbSets&&dbSets.length>0)
+          setSets(dbSets.map(s=>({...s, items: typeof s.items==='string'?JSON.parse(s.items):s.items})));
+        if(dbDispatches&&dbDispatches.length>0)
+          setDispatches(dbDispatches.map(d=>({...d, items: typeof d.items==='string'?JSON.parse(d.items):d.items})));
+        if(dbLocSales&&dbLocSales.length>0)
+          setLocationSales(dbLocSales.map(s=>({...s, items: typeof s.items==='string'?JSON.parse(s.items):s.items})));
+      } catch(e){ console.warn('Could not load from Supabase:', e.message); }
+      setLoading(false);
+    };
+    load();
+  },[]);
 
   // ── HELPERS ───────────────────────────────────────────────
   const getSetById = id => sets.find(s=>s.id===Number(id)||s.id===id||s.name===id);
@@ -273,24 +296,39 @@ export default function Products({ products, setProducts }) {
     setSetForm(prev=>({...prev, items:prev.items.filter((_,i)=>i!==idx)}));
   };
 
-  const saveSet = () => {
+  const saveSet = async () => {
     if(!setForm.name.trim()) return alert('Set name is required.');
     if(setForm.items.length===0) return alert('Add at least one product to the set.');
     const incomplete = setForm.items.find(i=>!i.product||!i.qty||i.qty<1);
     if(incomplete) return alert('All set items must have a product and quantity ≥ 1.');
     const priceToSave = Number(setForm.price)||computeSetPrice(setForm.id);
-    const toSave = {...setForm, price:priceToSave, isNew:undefined};
-    if(setForm.isNew) {
-      setSets(prev=>[...prev, toSave]);
-    } else {
-      setSets(prev=>prev.map(s=>s.id===toSave.id?toSave:s));
+    const toSave = {...setForm, price:priceToSave, isNew:undefined,
+      items: JSON.stringify(setForm.items)};
+    try {
+      const { db } = await import('@/lib/supabase');
+      if(setForm.isNew) {
+        const row = await db.addSet(toSave).catch(()=>null);
+        const saved = row||{...toSave, items:setForm.items};
+        if(typeof saved.items==='string') saved.items=JSON.parse(saved.items);
+        setSets(prev=>[...prev, saved]);
+      } else {
+        await db.updateSet(setForm.id, toSave).catch(()=>{});
+        setSets(prev=>prev.map(s=>s.id===setForm.id
+          ?{...toSave,items:setForm.items}:s));
+      }
+    } catch(e){
+      // fallback: save in-memory only
+      const toSaveMem = {...setForm, price:priceToSave, isNew:undefined};
+      if(setForm.isNew) setSets(prev=>[...prev, toSaveMem]);
+      else setSets(prev=>prev.map(s=>s.id===toSaveMem.id?toSaveMem:s));
     }
     setModal(null);
     setSetForm(null);
   };
 
-  const deleteSet = (id) => {
+  const deleteSet = async (id) => {
     if(!window.confirm('Delete this set?')) return;
+    try { const { db } = await import('@/lib/supabase'); await db.deleteSet(id).catch(()=>{}); } catch(e){}
     setSets(prev=>prev.filter(s=>s.id!==id));
   };
 
@@ -323,6 +361,7 @@ export default function Products({ products, setProducts }) {
         }
       } catch(e){}
 
+      const expandedItems = set.items.map(i=>({product:i.product, qty:i.qty*qty}));
       const dispatch = {
         id: Date.now(),
         date: form.date,
@@ -335,12 +374,13 @@ export default function Products({ products, setProducts }) {
         dispatched_by: form.dispatched_by,
         notes: form.notes,
         status: 'In Transit',
-        // Expand items for display
-        items: set.items.map(i=>({
-          product:i.product, qty:i.qty*qty
-        })),
+        items: expandedItems,
       };
-      setDispatches(prev=>[...prev, dispatch]);
+      try {
+        const { db } = await import('@/lib/supabase');
+        const row = await db.addDispatch({...dispatch, items:JSON.stringify(expandedItems)}).catch(()=>null);
+        setDispatches(prev=>[...prev, row?{...row,items:expandedItems}:dispatch]);
+      } catch(e){ setDispatches(prev=>[...prev, dispatch]); }
       setModal(null);
       setSaving(false);
       alert(`Dispatched! ${qty} set(s) of "${set.name}" sent to ${form.to_location}`);
@@ -376,22 +416,26 @@ export default function Products({ products, setProducts }) {
         dispatched_by: form.dispatched_by,
         notes: form.notes,
         status: 'In Transit',
+        items: null,
       };
-      setDispatches(prev=>[...prev, dispatch]);
+      try {
+        const { db } = await import('@/lib/supabase');
+        const row = await db.addDispatch(dispatch).catch(()=>null);
+        setDispatches(prev=>[...prev, row||dispatch]);
+      } catch(e){ setDispatches(prev=>[...prev, dispatch]); }
       setModal(null);
       setSaving(false);
       alert(`Dispatched! ${qty} units of ${form.product} sent to ${form.to_location}`);
     }
   };
 
-  const markDelivered = (id) => {
-    setDispatches(prev=>prev.map(d=>
-      d.id===id?{...d,status:'Delivered'}:d
-    ));
+  const markDelivered = async (id) => {
+    try { const { db } = await import('@/lib/supabase'); await db.updateDispatch(id,{status:'Delivered'}).catch(()=>{}); } catch(e){}
+    setDispatches(prev=>prev.map(d=>d.id===id?{...d,status:'Delivered'}:d));
   };
 
   // ── RECORD SALE FROM LOCATION ──────────────────────────────
-  const saveLocationSale = () => {
+  const saveLocationSale = async () => {
     const isSet = form.saleType==='set';
 
     if(isSet) {
@@ -412,6 +456,7 @@ export default function Products({ products, setProducts }) {
       const setPrice = Number(form.price)||computeSetPrice(form.setId);
       const total    = qty * setPrice;
 
+      const saleItems = set.items.map(i=>({product:i.product, qty:i.qty*qty}));
       const sale = {
         id: Date.now(),
         date: form.date,
@@ -424,10 +469,13 @@ export default function Products({ products, setProducts }) {
         total,
         customer: form.customer,
         notes: form.notes,
-        // Expand items for stock deduction tracking
-        items: set.items.map(i=>({product:i.product, qty:i.qty*qty})),
+        items: saleItems,
       };
-      setLocationSales(prev=>[...prev, sale]);
+      try {
+        const { db } = await import('@/lib/supabase');
+        const row = await db.addLocationSale({...sale, items:JSON.stringify(saleItems)}).catch(()=>null);
+        setLocationSales(prev=>[...prev, row?{...row,items:saleItems}:sale]);
+      } catch(e){ setLocationSales(prev=>[...prev, sale]); }
       setModal(null);
       alert(`Sale recorded! ${qty} set(s) sold at ${form.location} — Total: ${fmt(total)}`);
 
@@ -444,6 +492,7 @@ export default function Products({ products, setProducts }) {
         id: Date.now(),
         date: form.date,
         saleType: 'single',
+        items: null,
         product: form.product,
         location: form.location,
         qty,
@@ -452,7 +501,11 @@ export default function Products({ products, setProducts }) {
         customer: form.customer,
         notes: form.notes,
       };
-      setLocationSales(prev=>[...prev, sale]);
+      try {
+        const { db } = await import('@/lib/supabase');
+        const row = await db.addLocationSale(sale).catch(()=>null);
+        setLocationSales(prev=>[...prev, row||sale]);
+      } catch(e){ setLocationSales(prev=>[...prev, sale]); }
       setModal(null);
       alert(`Sale recorded! ${qty} units sold at ${form.location}`);
     }
