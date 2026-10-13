@@ -167,7 +167,7 @@ export default function Products({ products, setProducts }) {
 
   // Sets state
   const [sets,     setSets]     = useState(DEFAULT_SETS);
-  const [setForm,  setSetForm]  = useState(null); // null or set object being edited
+  const [setEditor, setSetEditor] = useState(null); // null or set object being edited
   const [loading,  setLoading]  = useState(true);
 
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
@@ -261,7 +261,7 @@ export default function Products({ products, setProducts }) {
 
   // ── SET CRUD ──────────────────────────────────────────────
   const openNewSet = () => {
-    setSetForm({
+    setSetEditor({
       id: Date.now(),
       name: '',
       description: '',
@@ -274,56 +274,56 @@ export default function Products({ products, setProducts }) {
   };
 
   const openEditSet = (set) => {
-    setSetForm({ ...set, items: set.items.map(i=>({...i})) });
+    setSetEditor({ ...set, items: set.items.map(i=>({...i})) });
     setModal('edit-set');
   };
 
   const addItemToSetForm = () => {
-    setSetForm(prev=>({
+    setSetEditor(prev=>({
       ...prev,
       items:[...prev.items, { product:'', qty:1 }]
     }));
   };
 
   const updateSetItem = (idx, key, val) => {
-    setSetForm(prev=>({
+    setSetEditor(prev=>({
       ...prev,
       items: prev.items.map((it,i)=>i===idx?{...it,[key]:val}:it)
     }));
   };
 
   const removeSetItem = (idx) => {
-    setSetForm(prev=>({...prev, items:prev.items.filter((_,i)=>i!==idx)}));
+    setSetEditor(prev=>({...prev, items:prev.items.filter((_,i)=>i!==idx)}));
   };
 
   const saveSet = async () => {
-    if(!setForm.name.trim()) return alert('Set name is required.');
-    if(setForm.items.length===0) return alert('Add at least one product to the set.');
-    const incomplete = setForm.items.find(i=>!i.product||!i.qty||i.qty<1);
+    if(!setEditor.name.trim()) return alert('Set name is required.');
+    if(setEditor.items.length===0) return alert('Add at least one product to the set.');
+    const incomplete = setEditor.items.find(i=>!i.product||!i.qty||i.qty<1);
     if(incomplete) return alert('All set items must have a product and quantity ≥ 1.');
-    const priceToSave = Number(setForm.price)||computeSetPrice(setForm.id);
-    const toSave = {...setForm, price:priceToSave, isNew:undefined,
-      items: JSON.stringify(setForm.items)};
+    const priceToSave = Number(setEditor.price)||computeSetPrice(setEditor.id);
+    const toSave = {...setEditor, price:priceToSave, isNew:undefined,
+      items: JSON.stringify(setEditor.items)};
     try {
       const { db } = await import('@/lib/supabase');
-      if(setForm.isNew) {
+      if(setEditor.isNew) {
         const row = await db.addSet(toSave).catch(()=>null);
-        const saved = row||{...toSave, items:setForm.items};
+        const saved = row||{...toSave, items:setEditor.items};
         if(typeof saved.items==='string') saved.items=JSON.parse(saved.items);
         setSets(prev=>[...prev, saved]);
       } else {
-        await db.updateSet(setForm.id, toSave).catch(()=>{});
-        setSets(prev=>prev.map(s=>s.id===setForm.id
-          ?{...toSave,items:setForm.items}:s));
+        await db.updateSet(setEditor.id, toSave).catch(()=>{});
+        setSets(prev=>prev.map(s=>s.id===setEditor.id
+          ?{...toSave,items:setEditor.items}:s));
       }
     } catch(e){
       // fallback: save in-memory only
-      const toSaveMem = {...setForm, price:priceToSave, isNew:undefined};
-      if(setForm.isNew) setSets(prev=>[...prev, toSaveMem]);
+      const toSaveMem = {...setEditor, price:priceToSave, isNew:undefined};
+      if(setEditor.isNew) setSets(prev=>[...prev, toSaveMem]);
       else setSets(prev=>prev.map(s=>s.id===toSaveMem.id?toSaveMem:s));
     }
     setModal(null);
-    setSetForm(null);
+    setSetEditor(null);
   };
 
   const deleteSet = async (id) => {
@@ -1298,24 +1298,24 @@ export default function Products({ products, setProducts }) {
       )}
 
       {/* ═══════════════════ MODAL: CREATE / EDIT SET ════════════════════ */}
-      {modal==='edit-set'&&setForm&&(
-        <Modal title={setForm.isNew?'Create New Product Set':'Edit Set'} onClose={()=>{setModal(null);setSetForm(null);}}>
-          <Input label='Set Name *' value={setForm.name}
-            onChange={v=>setSetForm(p=>({...p,name:v}))}
+      {modal==='edit-set'&&setEditor&&(
+        <Modal title={setEditor.isNew?'Create New Product Set':'Edit Set'} onClose={()=>{setModal(null);setSetEditor(null);}}>
+          <Input label='Set Name *' value={setEditor.name}
+            onChange={v=>setSetEditor(p=>({...p,name:v}))}
             placeholder='e.g. Pure Essence Hair Care Set'/>
-          <Input label='Description' value={setForm.description}
-            onChange={v=>setSetForm(p=>({...p,description:v}))}
+          <Input label='Description' value={setEditor.description}
+            onChange={v=>setSetEditor(p=>({...p,description:v}))}
             placeholder='Brief description of this set...'/>
           <Input label='Set Selling Price (₦) — leave 0 to auto-sum product prices'
-            type='number' value={setForm.price}
-            onChange={v=>setSetForm(p=>({...p,price:v}))}/>
+            type='number' value={setEditor.price}
+            onChange={v=>setSetEditor(p=>({...p,price:v}))}/>
 
           <div style={{marginBottom:8}}>
             <div style={{fontSize:11,fontWeight:700,color:'#165C35',
               textTransform:'uppercase',letterSpacing:1,marginBottom:8,
               fontFamily:'sans-serif'}}>Products in this Set *</div>
 
-            {setForm.items.length===0&&(
+            {setEditor.items.length===0&&(
               <div style={{background:'#FEF9E7',border:'1px solid #E67E22',
                 borderRadius:8,padding:'12px 16px',fontSize:13,
                 color:'#E67E22',fontFamily:'sans-serif',marginBottom:12}}>
@@ -1323,7 +1323,7 @@ export default function Products({ products, setProducts }) {
               </div>
             )}
 
-            {setForm.items.map((item,idx)=>(
+            {setEditor.items.map((item,idx)=>(
               <div key={idx} style={{display:'grid',
                 gridTemplateColumns:'1fr auto auto',gap:8,
                 alignItems:'end',marginBottom:10,
@@ -1352,28 +1352,28 @@ export default function Products({ products, setProducts }) {
             </Btn>
           </div>
 
-          {setForm.items.length>0&&(
+          {setEditor.items.length>0&&(
             <div style={{background:'#E8F5EE',borderRadius:8,
               padding:'12px 16px',margin:'16px 0',fontSize:13,
               fontFamily:'sans-serif'}}>
-              <strong>Preview:</strong> 1 set = {setForm.items
+              <strong>Preview:</strong> 1 set = {setEditor.items
                 .filter(i=>i.product)
                 .map(i=>`${i.qty} × ${i.product||'?'}`).join(' + ')}
               <div style={{marginTop:6,color:'#165C35',fontWeight:700}}>
-                Auto price: {fmt(setForm.items.reduce((t,i)=>{
+                Auto price: {fmt(setEditor.items.reduce((t,i)=>{
                   const p=products.find(x=>x.name===i.product);
                   return t+(p?Number(p.price||0)*i.qty:0);
                 },0))}
-                {' '}(set override price: {Number(setForm.price)>0?fmt(setForm.price):'not set'})
+                {' '}(set override price: {Number(setEditor.price)>0?fmt(setEditor.price):'not set'})
               </div>
             </div>
           )}
 
           <div style={{display:'flex',gap:10}}>
             <Btn onClick={saveSet} color='purple'>
-              {setForm.isNew?'Create Set':'Save Changes'}
+              {setEditor.isNew?'Create Set':'Save Changes'}
             </Btn>
-            <Btn onClick={()=>{setModal(null);setSetForm(null);}} color='grey' outline>Cancel</Btn>
+            <Btn onClick={()=>{setModal(null);setSetEditor(null);}} color='grey' outline>Cancel</Btn>
           </div>
         </Modal>
       )}
