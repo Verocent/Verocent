@@ -8,18 +8,43 @@ const today = () => new Date().toISOString().split('T')[0];
 const invId = () => `INV-${new Date().toISOString().replace(/-/g,'').substr(0,8)}-${String(Math.floor(Math.random()*9000)+1000)}`;
 const retId = () => `RET-${new Date().toISOString().replace(/-/g,'').substr(0,8)}-${String(Math.floor(Math.random()*9000)+1000)}`;
 
+// ── Nigerian sales locations ──────────────────────────────
+const LOCATIONS = [
+  'Kaduna (HQ)',
+  'Abuja (FCT)',
+  'Lagos',
+  'Port Harcourt',
+  'Benin City',
+  'Warri',
+  'Sokoto',
+  'Kano',
+  'Anambra',
+  'Enugu',
+  'Ibadan',
+  'Owerri',
+  'Calabar',
+  'Uyo',
+  'Asaba',
+  'Maiduguri',
+  'Jos',
+  'Ilorin',
+  'Abeokuta',
+  'Online / Remote',
+  'Other',
+];
+
 function Badge({ label, color='green' }) {
   const map = {
     green:{b:'#E8F5EE',t:'#165C35'}, red:{b:'#FADBD8',t:'#C0392B'},
     amber:{b:'#FEF9E7',t:'#E67E22'}, gold:{b:'#FDF6E3',t:'#7D4E00'},
-    blue:{b:'#EBF5FB',t:'#1A56DB'},
+    blue:{b:'#EBF5FB',t:'#1A56DB'}, purple:{b:'#F5EEF8',t:'#7D3C98'},
   };
   const s = map[color]||map.green;
   return <span style={{background:s.b,color:s.t,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>{label}</span>;
 }
 
 function Btn({ children, onClick, color='green', small, outline, disabled }) {
-  const bg = {green:'#1F6F43',red:'#C0392B',gold:'#D4A017',blue:'#1A56DB',amber:'#E67E22',grey:'#e0e0e0'}[color]||'#1F6F43';
+  const bg = {green:'#1F6F43',red:'#C0392B',gold:'#D4A017',blue:'#1A56DB',amber:'#E67E22',grey:'#e0e0e0',purple:'#7D3C98'}[color]||'#1F6F43';
   return (
     <button onClick={onClick} disabled={disabled}
       style={{background:outline?'transparent':bg,color:outline?bg:'#fff',
@@ -76,7 +101,7 @@ function Modal({ title, onClose, children }) {
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:1000,
       display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-      <div style={{background:'#fff',borderRadius:14,width:'100%',maxWidth:680,
+      <div style={{background:'#fff',borderRadius:14,width:'100%',maxWidth:720,
         maxHeight:'90vh',overflow:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
         <div style={{background:'#1F6F43',padding:'14px 20px',display:'flex',
           justifyContent:'space-between',alignItems:'center',borderRadius:'14px 14px 0 0'}}>
@@ -109,7 +134,7 @@ const exportCSV = (data, filename) => {
   URL.revokeObjectURL(url);
 };
 
-// Invoice printer
+// Invoice printer — includes location
 function printInvoice(sale) {
   const balance = (sale.total||0)-(sale.paid||0);
   const w = window.open('','_blank');
@@ -126,6 +151,7 @@ function printInvoice(sale) {
     .grand{font-size:18px;font-weight:bold;color:#1F6F43;border-top:2px solid #1F6F43;margin-top:8px;padding-top:8px}
     .owing{color:#C0392B;font-weight:bold}
     .paid-full{color:#1F6F43;font-weight:bold}
+    .location-badge{display:inline-block;background:#F5EEF8;color:#7D3C98;border-radius:12px;padding:2px 12px;font-size:12px;font-weight:bold;margin-left:8px}
     .footer{margin-top:32px;padding-top:12px;border-top:1px solid #ccc;font-size:12px;color:#888;font-style:italic}
     @media print{.no-print{display:none}}
   </style></head><body>
@@ -136,6 +162,7 @@ function printInvoice(sale) {
     <tr><td><strong>Invoice No:</strong></td><td>${sale.id}</td><td><strong>Date:</strong></td><td>${sale.date}</td></tr>
     <tr><td><strong>Customer:</strong></td><td>${sale.customer}</td><td><strong>Phone:</strong></td><td>${sale.phone||'N/A'}</td></tr>
     <tr><td><strong>Payment:</strong></td><td>${sale.method||'N/A'}</td><td><strong>Delivery:</strong></td><td>${sale.delivery||'N/A'}</td></tr>
+    <tr><td><strong>Sales Location:</strong></td><td colspan="3"><span class="location-badge">📍 ${sale.location||'Not specified'}</span></td></tr>
   </table>
   <table>
     <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Total</th></tr>
@@ -161,7 +188,11 @@ function printInvoice(sale) {
 }
 
 // ── Blank forms ───────────────────────────────────────────
-const blankSale = { date:today(),customer:'',phone:'',product:'',qty:'1',price:'',discount:'0',paid:'',method:'Bank Transfer',delivery:'Pending' };
+const blankSale = {
+  date:today(), customer:'', phone:'', product:'', qty:'1',
+  price:'', discount:'0', paid:'', method:'Bank Transfer',
+  delivery:'Pending', location:'Kaduna (HQ)'
+};
 const blankCust = { name:'',type:'Retail',phone:'',email:'',address:'',category:'New' };
 const blankReturn = {
   date:today(), return_id:'', customer:'', phone:'', product:'', qty:'1',
@@ -170,13 +201,14 @@ const blankReturn = {
 };
 
 export default function Sales({ sales, setSales, customers, setCustomers, products, setProducts }) {
-  const [tab,     setTab]     = useState('log');
-  const [modal,   setModal]   = useState(null);
-  const [form,    setForm]    = useState({});
-  const [saving,  setSaving]  = useState(false);
-  const [invSale, setInvSale] = useState(null);
-  const [filter,  setFilter]  = useState('All');
-  const [returns, setReturns] = useState([]);
+  const [tab,          setTab]          = useState('log');
+  const [modal,        setModal]        = useState(null);
+  const [form,         setForm]         = useState({});
+  const [saving,       setSaving]       = useState(false);
+  const [invSale,      setInvSale]      = useState(null);
+  const [filter,       setFilter]       = useState('All');
+  const [locFilter,    setLocFilter]    = useState('All');
+  const [returns,      setReturns]      = useState([]);
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const calcTotal = fm => Math.max(0,(Number(fm.qty||1)*Number(fm.price||0))-Number(fm.discount||0));
@@ -189,7 +221,8 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
     const paid   = Number(form.paid||0);
     const status = paid>=total?'Paid':paid>0?'Partial':'Unpaid';
     const payload = { ...form, id:form.id||invId(), total, paid, status,
-      qty:Number(form.qty)||1, price:Number(form.price)||0, discount:Number(form.discount||0) };
+      qty:Number(form.qty)||1, price:Number(form.price)||0,
+      discount:Number(form.discount||0), location:form.location||'' };
     try {
       const { db } = await import('@/lib/supabase');
       if(modal==='add-sale') {
@@ -270,8 +303,8 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
     setModal(null);
   };
 
-  const delReturn = (id, retId) => {
-    if(!window.confirm(`Delete return record ${retId}?`)) return;
+  const delReturn = (id, rId) => {
+    if(!window.confirm(`Delete return record ${rId}?`)) return;
     setReturns(prev=>prev.filter(r=>r.id!==id));
   };
 
@@ -280,17 +313,34 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
   const totalPaid   = sales.reduce((s,x)=>s+(x.paid||0),0);
   const totalOut    = sales.reduce((s,x)=>s+((x.total||0)-(x.paid||0)),0);
   const totalRefund = returns.reduce((s,r)=>s+(r.refund_amount||0),0);
-  const filtered    = filter==='All'?sales:sales.filter(s=>s.status===filter);
+
+  // ── Location breakdown ───────────────────────────────
+  const activeLocations = [...new Set(sales.map(s=>s.location||'Unspecified').filter(Boolean))].sort();
+  const locationStats = activeLocations.map(loc => {
+    const locSales = sales.filter(s=>(s.location||'Unspecified')===loc);
+    return {
+      loc,
+      count: locSales.length,
+      revenue: locSales.reduce((s,x)=>s+(x.total||0),0),
+      collected: locSales.reduce((s,x)=>s+(x.paid||0),0),
+      outstanding: locSales.reduce((s,x)=>s+((x.total||0)-(x.paid||0)),0),
+    };
+  }).sort((a,b)=>b.revenue-a.revenue);
+
+  // ── Filter chain: status + location ──────────────────
+  let filtered = sales;
+  if(filter!=='All')    filtered = filtered.filter(s=>s.status===filter);
+  if(locFilter!=='All') filtered = filtered.filter(s=>(s.location||'Unspecified')===locFilter);
 
   const TH = ({children,center}) => (
     <th style={{background:'#165C35',color:'#fff',padding:'9px 12px',
       textAlign:center?'center':'left',fontSize:11,textTransform:'uppercase',
       whiteSpace:'nowrap',fontFamily:'sans-serif'}}>{children}</th>
   );
-  const TD = ({children,center,bold,green,red,amber}) => (
+  const TD = ({children,center,bold,green,red,amber,purple}) => (
     <td style={{padding:'9px 12px',textAlign:center?'center':'left',
       fontWeight:bold?700:400,
-      color:green?'#165C35':red?'#C0392B':amber?'#E67E22':'#1A1A1A',
+      color:purple?'#7D3C98':green?'#165C35':red?'#C0392B':amber?'#E67E22':'#1A1A1A',
       verticalAlign:'middle',fontFamily:'sans-serif',fontSize:13}}>{children}</td>
   );
 
@@ -300,6 +350,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
       <div style={{display:'flex',gap:8,marginBottom:20,flexWrap:'wrap'}}>
         {[
           ['log','💰 Sales Log'],
+          ['locations','📍 By Location'],
           ['customers','👥 Customers'],
           ['returns',`↩️ Returns${returns.length>0?` (${returns.length})`:''}`],
         ].map(([k,l])=>(
@@ -319,7 +370,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
             <KPI label='Total Revenue'  value={fmt(totalRev)}   sub={`${sales.length} orders`}/>
             <KPI label='Cash Collected' value={fmt(totalPaid)}/>
             <KPI label='Outstanding'    value={fmt(totalOut)}   color='#C0392B' bg='#FADBD8' sub={`${sales.filter(s=>s.status!=='Paid').length} orders`}/>
-            <KPI label='Avg Order'      value={fmt(totalRev/Math.max(sales.length,1))}/>
+            <KPI label='Locations Active' value={activeLocations.length} color='#7D3C98' bg='#F5EEF8' sub='cities selling'/>
           </div>
 
           <div style={{background:'#fff',borderRadius:14,border:'1px solid #C9C9C0',overflow:'hidden'}}>
@@ -331,9 +382,9 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               </div>
             </div>
 
-            {/* Filter bar */}
-            <div style={{padding:'12px 20px',borderBottom:'1px solid #C9C9C0',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-              <span style={{fontSize:12,fontWeight:700,fontFamily:'sans-serif',color:'#666'}}>Filter:</span>
+            {/* Status filter bar */}
+            <div style={{padding:'10px 20px 0',borderBottom:'1px solid #C9C9C0',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+              <span style={{fontSize:12,fontWeight:700,fontFamily:'sans-serif',color:'#666'}}>Payment:</span>
               {['All','Paid','Partial','Unpaid'].map(fil=>(
                 <button key={fil} onClick={()=>setFilter(fil)}
                   style={{padding:'4px 14px',borderRadius:20,
@@ -346,17 +397,44 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               ))}
             </div>
 
+            {/* Location filter bar */}
+            <div style={{padding:'8px 20px 10px',borderBottom:'1px solid #C9C9C0',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+              <span style={{fontSize:12,fontWeight:700,fontFamily:'sans-serif',color:'#666'}}>📍 Location:</span>
+              <button onClick={()=>setLocFilter('All')}
+                style={{padding:'4px 14px',borderRadius:20,
+                  border:`2px solid ${locFilter==='All'?'#7D3C98':'#C9C9C0'}`,
+                  background:locFilter==='All'?'#F5EEF8':'#fff',
+                  fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'sans-serif',
+                  color:locFilter==='All'?'#7D3C98':'#1A1A1A'}}>
+                All ({sales.length})
+              </button>
+              {activeLocations.map(loc=>{
+                const cnt = sales.filter(s=>(s.location||'Unspecified')===loc).length;
+                return (
+                  <button key={loc} onClick={()=>setLocFilter(loc)}
+                    style={{padding:'4px 14px',borderRadius:20,
+                      border:`2px solid ${locFilter===loc?'#7D3C98':'#C9C9C0'}`,
+                      background:locFilter===loc?'#F5EEF8':'#fff',
+                      fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'sans-serif',
+                      color:locFilter===loc?'#7D3C98':'#1A1A1A'}}>
+                    {loc} ({cnt})
+                  </button>
+                );
+              })}
+            </div>
+
             <div style={{padding:20,overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',minWidth:900}}>
+              <table style={{width:'100%',borderCollapse:'collapse',minWidth:1000}}>
                 <thead><tr>
                   <TH>Invoice No.</TH><TH>Date</TH><TH>Customer</TH><TH>Product</TH>
+                  <TH>📍 Location</TH>
                   <TH center>Qty</TH><TH center>Total</TH><TH center>Paid</TH>
                   <TH center>Balance</TH><TH center>Status</TH><TH center>Delivery</TH><TH>Actions</TH>
                 </tr></thead>
                 <tbody>
                   {filtered.length===0?(
-                    <tr><td colSpan={11} style={{padding:32,textAlign:'center',color:'#888',fontFamily:'sans-serif'}}>
-                      No sales records yet. Click + New Sale to start.
+                    <tr><td colSpan={12} style={{padding:32,textAlign:'center',color:'#888',fontFamily:'sans-serif'}}>
+                      No sales records match this filter. Click + New Sale to start.
                     </td></tr>
                   ):filtered.map((s,i)=>(
                     <tr key={s.id} style={{background:i%2===0?'#E8F5EE':'#fff'}}>
@@ -364,6 +442,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                       <TD>{s.date}</TD>
                       <TD bold>{s.customer}</TD>
                       <TD>{s.product}</TD>
+                      <TD purple>{s.location||<span style={{color:'#bbb',fontStyle:'italic'}}>—</span>}</TD>
                       <TD center>{s.qty}</TD>
                       <TD center bold green>{fmt(s.total)}</TD>
                       <TD center green>{fmt(s.paid)}</TD>
@@ -375,7 +454,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                       <td style={{padding:'9px 12px'}}>
                         <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                           <Btn small color='green' onClick={()=>{ setInvSale(s); }}>🧾 Invoice</Btn>
-                          <Btn small color='blue'  onClick={()=>{ setForm({...s,qty:String(s.qty),price:String(s.price),discount:String(s.discount||0),paid:String(s.paid)}); setModal('edit-sale'); }}>✏️ Edit</Btn>
+                          <Btn small color='blue'  onClick={()=>{ setForm({...s,qty:String(s.qty),price:String(s.price),discount:String(s.discount||0),paid:String(s.paid),location:s.location||''}); setModal('edit-sale'); }}>✏️ Edit</Btn>
                           <Btn small color='red'   onClick={()=>delSale(s.id)}>🗑 Del</Btn>
                         </div>
                       </td>
@@ -386,6 +465,118 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
             </div>
           </div>
         </>
+      )}
+
+      {/* ══ BY LOCATION ══ */}
+      {tab==='locations'&&(
+        <div>
+          {/* Summary KPIs */}
+          <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:20}}>
+            <KPI label='Total Revenue'     value={fmt(totalRev)}   sub={`${sales.length} total orders`}/>
+            <KPI label='Cash Collected'    value={fmt(totalPaid)}/>
+            <KPI label='Outstanding'       value={fmt(totalOut)}   color='#C0392B' bg='#FADBD8'/>
+            <KPI label='Locations Active'  value={activeLocations.length} color='#7D3C98' bg='#F5EEF8'/>
+          </div>
+
+          {/* Location cards */}
+          {locationStats.length===0?(
+            <div style={{background:'#fff',borderRadius:14,border:'1px solid #C9C9C0',padding:40,textAlign:'center',color:'#888',fontFamily:'sans-serif'}}>
+              <div style={{fontSize:40,marginBottom:12}}>📍</div>
+              <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>No location data yet</div>
+              <div style={{fontSize:13,color:'#aaa',marginBottom:20}}>When you record a sale with a location, it will appear here with a revenue breakdown.</div>
+              <Btn color='gold' onClick={()=>{setTab('log');setTimeout(()=>{setForm({...blankSale});setModal('add-sale');},100);}}>+ Record First Sale</Btn>
+            </div>
+          ):(
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:16}}>
+              {locationStats.map(({loc,count,revenue,collected,outstanding})=>{
+                const pct = revenue>0?Math.round((collected/revenue)*100):0;
+                return (
+                  <div key={loc} style={{background:'#fff',borderRadius:14,border:'2px solid #E8D5F5',
+                    overflow:'hidden',boxShadow:'0 2px 8px rgba(125,60,152,0.08)'}}>
+                    <div style={{background:'linear-gradient(135deg,#7D3C98,#5D2D72)',padding:'14px 18px',
+                      display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <div>
+                        <div style={{color:'#fff',fontWeight:800,fontSize:14,fontFamily:'sans-serif'}}>📍 {loc}</div>
+                        <div style={{color:'rgba(255,255,255,0.75)',fontSize:11,fontFamily:'sans-serif',marginTop:2}}>{count} sale{count!==1?'s':''}</div>
+                      </div>
+                      <div style={{color:'#F9E4B7',fontSize:18,fontWeight:800,fontFamily:'sans-serif'}}>{fmt(revenue)}</div>
+                    </div>
+                    <div style={{padding:'14px 18px'}}>
+                      {/* Collection progress bar */}
+                      <div style={{marginBottom:12}}>
+                        <div style={{display:'flex',justifyContent:'space-between',fontSize:11,fontFamily:'sans-serif',color:'#888',marginBottom:4}}>
+                          <span>Collection rate</span><span style={{fontWeight:700,color:'#165C35'}}>{pct}%</span>
+                        </div>
+                        <div style={{background:'#E8F5EE',borderRadius:100,height:8}}>
+                          <div style={{background:pct>=90?'#1F6F43':pct>=50?'#D4A017':'#C0392B',
+                            borderRadius:100,height:8,width:`${pct}%`,transition:'width 0.4s'}}/>
+                        </div>
+                      </div>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                        <div style={{background:'#E8F5EE',borderRadius:8,padding:'8px 10px',textAlign:'center'}}>
+                          <div style={{fontSize:10,color:'#888',fontFamily:'sans-serif',marginBottom:2}}>COLLECTED</div>
+                          <div style={{fontSize:14,fontWeight:800,color:'#165C35',fontFamily:'sans-serif'}}>{fmt(collected)}</div>
+                        </div>
+                        <div style={{background:'#FADBD8',borderRadius:8,padding:'8px 10px',textAlign:'center'}}>
+                          <div style={{fontSize:10,color:'#888',fontFamily:'sans-serif',marginBottom:2}}>OUTSTANDING</div>
+                          <div style={{fontSize:14,fontWeight:800,color:'#C0392B',fontFamily:'sans-serif'}}>{fmt(outstanding)}</div>
+                        </div>
+                      </div>
+                      <button onClick={()=>{setLocFilter(loc);setTab('log');}}
+                        style={{marginTop:12,width:'100%',background:'#F5EEF8',border:'2px solid #E8D5F5',
+                          borderRadius:8,padding:'8px 0',fontSize:12,fontWeight:700,cursor:'pointer',
+                          color:'#7D3C98',fontFamily:'sans-serif'}}>
+                        View {loc} sales →
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Location comparison table */}
+          {locationStats.length>1&&(
+            <div style={{background:'#fff',borderRadius:14,border:'1px solid #C9C9C0',overflow:'hidden',marginTop:24}}>
+              <div style={{background:'#7D3C98',padding:'12px 20px'}}>
+                <span style={{color:'#fff',fontWeight:700,fontSize:14,fontFamily:'sans-serif'}}>📊 Location Comparison</span>
+              </div>
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
+                  <thead><tr>
+                    {['Rank','Location','Orders','Revenue','Collected','Outstanding','Collection %'].map(h=>(
+                      <th key={h} style={{background:'#F5EEF8',color:'#7D3C98',padding:'9px 14px',
+                        textAlign:h==='Location'||h==='Rank'?'left':'center',
+                        fontSize:11,textTransform:'uppercase',whiteSpace:'nowrap',fontFamily:'sans-serif'}}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {locationStats.map(({loc,count,revenue,collected,outstanding},i)=>{
+                      const pct = revenue>0?Math.round((collected/revenue)*100):0;
+                      return (
+                        <tr key={loc} style={{background:i%2===0?'#F9F5FC':'#fff'}}>
+                          <td style={{padding:'9px 14px',fontWeight:800,color:'#7D3C98',fontFamily:'sans-serif',fontSize:14}}>#{i+1}</td>
+                          <td style={{padding:'9px 14px',fontWeight:700,fontFamily:'sans-serif',fontSize:13}}>📍 {loc}</td>
+                          <td style={{padding:'9px 14px',textAlign:'center',fontFamily:'sans-serif',fontSize:13}}>{count}</td>
+                          <td style={{padding:'9px 14px',textAlign:'center',fontWeight:700,color:'#165C35',fontFamily:'sans-serif',fontSize:13}}>{fmt(revenue)}</td>
+                          <td style={{padding:'9px 14px',textAlign:'center',color:'#165C35',fontFamily:'sans-serif',fontSize:13}}>{fmt(collected)}</td>
+                          <td style={{padding:'9px 14px',textAlign:'center',color:outstanding>0?'#C0392B':'#165C35',fontWeight:outstanding>0?700:400,fontFamily:'sans-serif',fontSize:13}}>{fmt(outstanding)}</td>
+                          <td style={{padding:'9px 14px',textAlign:'center'}}>
+                            <span style={{background:pct>=90?'#E8F5EE':pct>=50?'#FEF9E7':'#FADBD8',
+                              color:pct>=90?'#165C35':pct>=50?'#E67E22':'#C0392B',
+                              borderRadius:20,padding:'2px 10px',fontSize:12,fontWeight:700,fontFamily:'sans-serif'}}>
+                              {pct}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ══ CUSTOMERS ══ */}
@@ -456,7 +647,6 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               </div>
             </div>
 
-            {/* How returns work */}
             <div style={{padding:'12px 16px',background:'#FEF9E7',fontSize:13,color:'#92400E',fontFamily:'sans-serif',borderBottom:'1px solid #C9C9C0'}}>
               ℹ️ <strong>How Returns Work:</strong> Log every product return here — whether it is a refund, exchange, or store credit. This keeps your records clean and helps track product quality issues.
             </div>
@@ -514,7 +704,6 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               <button onClick={()=>setInvSale(null)} style={{background:'none',border:'none',color:'#fff',fontSize:24,cursor:'pointer'}}>×</button>
             </div>
             <div style={{padding:24}}>
-              {/* Invoice preview */}
               <div style={{border:'2px solid #1F6F43',borderRadius:10,padding:20,marginBottom:20}}>
                 <div style={{borderBottom:'3px solid #D4A017',paddingBottom:12,marginBottom:16}}>
                   <div style={{fontSize:18,fontWeight:800,color:'#1F6F43',fontFamily:'sans-serif'}}>🌿 VEROCENT PURE ESSENCE</div>
@@ -528,6 +717,12 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                       <span style={{fontSize:13,fontWeight:600,fontFamily:'sans-serif'}}>{v}</span>
                     </div>
                   ))}
+                  {invSale.location&&(
+                    <div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:11,color:'#888',fontWeight:700,fontFamily:'sans-serif'}}>Sales Location: </span>
+                      <span style={{background:'#F5EEF8',color:'#7D3C98',borderRadius:12,padding:'2px 10px',fontSize:12,fontWeight:700,fontFamily:'sans-serif'}}>📍 {invSale.location}</span>
+                    </div>
+                  )}
                 </div>
                 <table style={{width:'100%',borderCollapse:'collapse',marginBottom:12}}>
                   <thead><tr>
@@ -562,7 +757,8 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                 <Btn color='blue'  onClick={()=>printInvoice(invSale)}>⬇️ Save as PDF</Btn>
                 <Btn color='gold'  onClick={()=>{
                   const balance=(invSale.total||0)-(invSale.paid||0);
-                  const text=`*VEROCENT PURE ESSENCE — INVOICE*\nInvoice: ${invSale.id}\nCustomer: ${invSale.customer}\nProduct: ${invSale.product}\nTotal: ${fmt(invSale.total)}\nPaid: ${fmt(invSale.paid)}\nBalance: ${balance>0?fmt(balance)+' OUTSTANDING':'FULLY PAID ✓'}`;
+                  const locLine=invSale.location?`\nLocation: ${invSale.location}`:'';
+                  const text=`*VEROCENT PURE ESSENCE — INVOICE*\nInvoice: ${invSale.id}\nCustomer: ${invSale.customer}\nProduct: ${invSale.product}${locLine}\nTotal: ${fmt(invSale.total)}\nPaid: ${fmt(invSale.paid)}\nBalance: ${balance>0?fmt(balance)+' OUTSTANDING':'FULLY PAID ✓'}`;
                   if(navigator.share){navigator.share({title:'Invoice',text});}
                   else{navigator.clipboard.writeText(text).then(()=>alert('Copied — paste into WhatsApp!'));}
                 }}>📤 Share WhatsApp</Btn>
@@ -578,6 +774,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
         <Modal title={modal==='add-sale'?'New Sale / Invoice':'Edit Sale'} onClose={()=>setModal(null)}>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
             <Input label='Date *' type='date' value={form.date} onChange={v=>f('date',v)}/>
+            <Select label='📍 Sales Location *' value={form.location} onChange={v=>f('location',v)} options={LOCATIONS}/>
             <Input label='Customer Name *' value={form.customer} onChange={v=>f('customer',v)}/>
             <Input label='Customer Phone' value={form.phone} onChange={v=>f('phone',v)}/>
             <Select label='Product *' value={form.product} onChange={v=>{
@@ -597,6 +794,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               {' '}| Paid: {fmt(form.paid||0)}
               {' '}| Balance: <span style={{color:'#C0392B',fontWeight:700}}>{fmt(calcTotal(form)-Number(form.paid||0))}</span>
               {' '}| Status: <strong>{Number(form.paid||0)>=calcTotal(form)?'✅ Paid':Number(form.paid||0)>0?'⏳ Partial':'❌ Unpaid'}</strong>
+              {form.location&&<span style={{marginLeft:12}}>| 📍 <span style={{color:'#7D3C98',fontWeight:700}}>{form.location}</span></span>}
             </div>
           )}
           <div style={{display:'flex',gap:10}}>
