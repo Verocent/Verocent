@@ -14,12 +14,12 @@ const DEFAULT_LOCATIONS = [
   'Anambra',
 ];
 
-// Default Verocent hair set (3 active products, 2 coming soon)
+// Default Verocent set (3 active products, 2 coming soon)
 const DEFAULT_SETS = [
   {
     id: 1,
-    name: 'Verocent hair care set',
-    description: 'Complete hair care bundle — all Verocent hair set products',
+    name: 'Verocent Hair Care Set',
+    description: 'Complete hair care bundle — all Verocent products',
     price: 0, // set price (can override)
     items: [
       { product: 'Deep Hair Moisturizer', qty: 1 },
@@ -182,8 +182,27 @@ export default function Products({ products, setProducts }) {
           db.getDispatches(),
           db.getLocationSales(),
         ]);
-        if(dbSets&&dbSets.length>0)
+
+        if(dbSets && dbSets.length > 0) {
+          // Supabase has sets — use them
           setSets(dbSets.map(s=>({...s, items: typeof s.items==='string'?JSON.parse(s.items):s.items})));
+        } else {
+          // No sets in Supabase yet — seed DEFAULT_SETS so they persist
+          const seeded = [];
+          for(const def of DEFAULT_SETS) {
+            const { id: _dropId, ...payload } = def;
+            const saved = await db.addSet({
+              ...payload,
+              items: JSON.stringify(def.items),
+            }).catch(()=>null);
+            seeded.push(saved
+              ? { ...saved, items: typeof saved.items==='string' ? JSON.parse(saved.items) : saved.items }
+              : def
+            );
+          }
+          if(seeded.length > 0) setSets(seeded);
+        }
+
         if(dbDispatches&&dbDispatches.length>0)
           setDispatches(dbDispatches.map(d=>({...d, items: typeof d.items==='string'?JSON.parse(d.items):d.items})));
         if(dbLocSales&&dbLocSales.length>0)
@@ -302,25 +321,48 @@ export default function Products({ products, setProducts }) {
     const incomplete = setEditor.items.find(i=>!i.product||!i.qty||i.qty<1);
     if(incomplete) return alert('All set items must have a product and quantity ≥ 1.');
     const priceToSave = Number(setEditor.price)||computeSetPrice(setEditor.id);
-    const toSave = {...setEditor, price:priceToSave, isNew:undefined,
-      items: JSON.stringify(setEditor.items)};
+    // Strip id for new sets; keep it for existing so Supabase can match
+    const { isNew, ...rest } = setEditor;
+    const toSave = { ...rest, price: priceToSave, items: JSON.stringify(setEditor.items) };
     try {
       const { db } = await import('@/lib/supabase');
-      if(setEditor.isNew) {
-        const row = await db.addSet(toSave).catch(()=>null);
-        const saved = row||{...toSave, items:setEditor.items};
-        if(typeof saved.items==='string') saved.items=JSON.parse(saved.items);
+      if(isNew) {
+        // Brand new set — always INSERT (let Supabase assign id)
+        const { id: _dropId, ...insertPayload } = toSave;
+        const row = await db.addSet(insertPayload).catch(()=>null);
+        const saved = row || { ...toSave, items: setEditor.items };
+        if(typeof saved.items==='string') saved.items = JSON.parse(saved.items);
         setSets(prev=>[...prev, saved]);
       } else {
-        await db.updateSet(setEditor.id, toSave).catch(()=>{});
-        setSets(prev=>prev.map(s=>s.id===setEditor.id
-          ?{...toSave,items:setEditor.items}:s));
+        // Existing or default set — try UPDATE first; if nothing was updated, INSERT
+        let updated = null;
+        try {
+          const rows = await db.updateSet(setEditor.id, toSave);
+          // db.updateSet uses safe() which returns [] on success (no rows back) or [] on error
+          // We need to detect "0 rows matched" — check by fetching the set
+          const check = await db.getSets();
+          updated = (check||[]).find(s=>s.id===setEditor.id || s.name===setEditor.name);
+        } catch(_){}
+
+        if(!updated) {
+          // No existing row — INSERT instead
+          const { id: _dropId, ...insertPayload } = toSave;
+          const row = await db.addSet(insertPayload).catch(()=>null);
+          const saved = row || { ...toSave, items: setEditor.items };
+          if(typeof saved.items==='string') saved.items = JSON.parse(saved.items);
+          setSets(prev=>prev.map(s=>s.id===setEditor.id ? saved : s));
+        } else {
+          // UPDATE succeeded — refresh local state
+          const parsed = { ...updated, items: typeof updated.items==='string'
+            ? JSON.parse(updated.items) : updated.items };
+          setSets(prev=>prev.map(s=>s.id===setEditor.id ? parsed : s));
+        }
       }
     } catch(e){
-      // fallback: save in-memory only
-      const toSaveMem = {...setEditor, price:priceToSave, isNew:undefined};
-      if(setEditor.isNew) setSets(prev=>[...prev, toSaveMem]);
-      else setSets(prev=>prev.map(s=>s.id===toSaveMem.id?toSaveMem:s));
+      // Fallback: save in-memory only
+      const toSaveMem = { ...setEditor, price: priceToSave, isNew: undefined };
+      if(isNew) setSets(prev=>[...prev, toSaveMem]);
+      else setSets(prev=>prev.map(s=>s.id===toSaveMem.id ? toSaveMem : s));
     }
     setModal(null);
     setSetEditor(null);
@@ -753,7 +795,7 @@ export default function Products({ products, setProducts }) {
             fontSize:13,fontFamily:'sans-serif',color:'#7D3C98'}}>
             <strong>About Sets:</strong> A set bundles multiple products into one unit.
             When you dispatch or sell 10 sets, the system automatically deducts the correct
-            quantity of each product. Perfect for your Verocent hair care sets!
+            quantity of each product. Perfect for your Pure Essence Hair Care Sets!
           </div>
 
           <div style={{background:'#fff',borderRadius:14,
@@ -775,7 +817,7 @@ export default function Products({ products, setProducts }) {
                   <div style={{fontSize:32,marginBottom:8}}>🎁</div>
                   <div style={{fontWeight:700,marginBottom:8}}>No sets yet</div>
                   <div style={{marginBottom:16,fontSize:13}}>
-                    Create your Verocent hair care set to start dispatching in sets.
+                    Create your Pure Essence Hair Care Set to start dispatching in sets.
                   </div>
                   <Btn color='purple' onClick={openNewSet}>+ Create First Set</Btn>
                 </div>
@@ -1302,7 +1344,7 @@ export default function Products({ products, setProducts }) {
         <Modal title={setEditor.isNew?'Create New Product Set':'Edit Set'} onClose={()=>{setModal(null);setSetEditor(null);}}>
           <Input label='Set Name *' value={setEditor.name}
             onChange={v=>setSetEditor(p=>({...p,name:v}))}
-            placeholder='e.g. Verocent hair care set'/>
+            placeholder='e.g. Pure Essence Hair Care Set'/>
           <Input label='Description' value={setEditor.description}
             onChange={v=>setSetEditor(p=>({...p,description:v}))}
             placeholder='Brief description of this set...'/>
