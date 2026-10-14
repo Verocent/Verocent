@@ -14,12 +14,12 @@ const DEFAULT_LOCATIONS = [
   'Anambra',
 ];
 
-// Default Pure Essence set (3 active products, 2 coming soon)
+// Default Verocent hair set (3 active products, 2 coming soon)
 const DEFAULT_SETS = [
   {
     id: 1,
-    name: 'Pure Essence Hair Care Set',
-    description: 'Complete hair care bundle — all Pure Essence products',
+    name: 'Verocent hair care set',
+    description: 'Complete hair care bundle — all Verocent hair set products',
     price: 0, // set price (can override)
     items: [
       { product: 'Deep Hair Moisturizer', qty: 1 },
@@ -753,7 +753,7 @@ export default function Products({ products, setProducts }) {
             fontSize:13,fontFamily:'sans-serif',color:'#7D3C98'}}>
             <strong>About Sets:</strong> A set bundles multiple products into one unit.
             When you dispatch or sell 10 sets, the system automatically deducts the correct
-            quantity of each product. Perfect for your Pure Essence Hair Care Sets!
+            quantity of each product. Perfect for your Verocent hair care sets!
           </div>
 
           <div style={{background:'#fff',borderRadius:14,
@@ -775,7 +775,7 @@ export default function Products({ products, setProducts }) {
                   <div style={{fontSize:32,marginBottom:8}}>🎁</div>
                   <div style={{fontWeight:700,marginBottom:8}}>No sets yet</div>
                   <div style={{marginBottom:16,fontSize:13}}>
-                    Create your Pure Essence Hair Care Set to start dispatching in sets.
+                    Create your Verocent hair care set to start dispatching in sets.
                   </div>
                   <Btn color='purple' onClick={openNewSet}>+ Create First Set</Btn>
                 </div>
@@ -1302,7 +1302,7 @@ export default function Products({ products, setProducts }) {
         <Modal title={setEditor.isNew?'Create New Product Set':'Edit Set'} onClose={()=>{setModal(null);setSetEditor(null);}}>
           <Input label='Set Name *' value={setEditor.name}
             onChange={v=>setSetEditor(p=>({...p,name:v}))}
-            placeholder='e.g. Pure Essence Hair Care Set'/>
+            placeholder='e.g. Verocent hair care set'/>
           <Input label='Description' value={setEditor.description}
             onChange={v=>setSetEditor(p=>({...p,description:v}))}
             placeholder='Brief description of this set...'/>
