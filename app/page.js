@@ -35,9 +35,44 @@ export default function Home() {
   const [production,   setProduction]   = useState([]);
   const [compliance,   setCompliance]   = useState([]);
 
-  // Wait for client to be ready — fixes hydration error
+  // On mount: mark ready AND restore session if user was already logged in
   useEffect(() => {
     setReady(true);
+    const restoreSession = async () => {
+      try {
+        const { supabase, db } = await import('@/lib/supabase');
+        if (!supabase) return;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;                     // not logged in — show login page
+        // Restore the user record from the staff table
+        const staffRows = await db.getStaff();
+        const matched = staffRows.find(
+          s => s.email?.toLowerCase() === session.user.email?.toLowerCase()
+        );
+        const restoredUser = matched || {
+          id: session.user.id,
+          name: session.user.email,
+          email: session.user.email,
+          role: 'Admin',
+        };
+        setCurrentUser(restoredUser);
+        // Load all ERP data fresh from Supabase
+        setLoading(true);
+        const [p,rm,sup,s,c,e,st,prod,comp] = await Promise.all([
+          db.getProducts(), db.getRawMaterials(), db.getSuppliers(),
+          db.getSales(), db.getCustomers(), db.getExpenses(),
+          db.getStaff(), db.getProduction(), db.getCompliance(),
+        ]);
+        setProducts(p||[]); setRawMaterials(rm||[]); setSuppliers(sup||[]);
+        setSales(s||[]); setCustomers(c||[]); setExpenses(e||[]);
+        setStaff(st||[]); setProduction(prod||[]); setCompliance(comp||[]);
+        setLoading(false);
+      } catch(err) {
+        console.error('Session restore failed:', err);
+        setLoading(false);
+      }
+    };
+    restoreSession();
   }, []);
 
   const loadData = async () => {
