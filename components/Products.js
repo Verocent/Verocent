@@ -24,7 +24,7 @@ const DEFAULT_SETS = [
     items: [
       { product: 'Deep Hair Moisturizer', qty: 1 },
       { product: 'Herbal Hair Cream',     qty: 1 },
-      { product: 'Scalp and Hair Oil',    qty: 1 },
+      { product: 'Scalp & Hair Oil',    qty: 1 },
     ],
     active: true,
   },
@@ -191,14 +191,13 @@ export default function Products({ products, setProducts }) {
           const seeded = [];
           for(const def of DEFAULT_SETS) {
             const { id: _dropId, ...payload } = def;
-            const saved = await db.addSet({
-              ...payload,
-              items: JSON.stringify(def.items),
-            }).catch(()=>null);
-            seeded.push(saved
-              ? { ...saved, items: typeof saved.items==='string' ? JSON.parse(saved.items) : saved.items }
-              : def
-            );
+            try {
+              const saved = await db.addSet({ ...payload, items: JSON.stringify(def.items) });
+              seeded.push({ ...saved, items: typeof saved.items==='string' ? JSON.parse(saved.items) : saved.items });
+            } catch(seedErr) {
+              console.warn('Could not seed set:', seedErr.message);
+              seeded.push(def);
+            }
           }
           if(seeded.length > 0) setSets(seeded);
         }
@@ -258,14 +257,14 @@ export default function Products({ products, setProducts }) {
     try {
       const { db } = await import('@/lib/supabase');
       if(modal==='add-product') {
-        const row = await db.addProduct(payload).catch(()=>null);
-        setProducts(prev=>[...prev, row||{...payload,id:Date.now()}]);
+        const row = await db.addProduct(payload);
+        setProducts(prev=>[...prev, row]);
       } else {
-        await db.updateProduct(form.id, payload).catch(()=>{});
+        await db.updateProduct(form.id, payload);
         setProducts(prev=>prev.map(p=>p.id===form.id?{...payload,id:form.id}:p));
       }
       setModal(null);
-    } catch(e){ alert('Error: '+e.message); }
+    } catch(e){ alert('Save failed — check your database connection.\n\n'+e.message); }
     setSaving(false);
   };
 
@@ -273,9 +272,9 @@ export default function Products({ products, setProducts }) {
     if(!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
     try {
       const { db } = await import('@/lib/supabase');
-      await db.deleteProduct(id).catch(()=>{});
-    } catch(e){}
-    setProducts(prev=>prev.filter(p=>p.id!==id));
+      await db.deleteProduct(id);
+      setProducts(prev=>prev.filter(p=>p.id!==id));
+    } catch(e){ alert('Delete failed: '+e.message); }
   };
 
   // ── SET CRUD ──────────────────────────────────────────────
@@ -321,57 +320,48 @@ export default function Products({ products, setProducts }) {
     const incomplete = setEditor.items.find(i=>!i.product||!i.qty||i.qty<1);
     if(incomplete) return alert('All set items must have a product and quantity ≥ 1.');
     const priceToSave = Number(setEditor.price)||computeSetPrice(setEditor.id);
-    // Strip id for new sets; keep it for existing so Supabase can match
     const { isNew, ...rest } = setEditor;
     const toSave = { ...rest, price: priceToSave, items: JSON.stringify(setEditor.items) };
     try {
       const { db } = await import('@/lib/supabase');
       if(isNew) {
-        // Brand new set — always INSERT (let Supabase assign id)
         const { id: _dropId, ...insertPayload } = toSave;
-        const row = await db.addSet(insertPayload).catch(()=>null);
-        const saved = row || { ...toSave, items: setEditor.items };
-        if(typeof saved.items==='string') saved.items = JSON.parse(saved.items);
+        const row = await db.addSet(insertPayload);
+        const saved = { ...row, items: typeof row.items==='string' ? JSON.parse(row.items) : row.items };
         setSets(prev=>[...prev, saved]);
       } else {
-        // Existing or default set — try UPDATE first; if nothing was updated, INSERT
-        let updated = null;
-        try {
-          const rows = await db.updateSet(setEditor.id, toSave);
-          // db.updateSet uses safe() which returns [] on success (no rows back) or [] on error
-          // We need to detect "0 rows matched" — check by fetching the set
-          const check = await db.getSets();
-          updated = (check||[]).find(s=>s.id===setEditor.id || s.name===setEditor.name);
-        } catch(_){}
-
-        if(!updated) {
-          // No existing row — INSERT instead
-          const { id: _dropId, ...insertPayload } = toSave;
-          const row = await db.addSet(insertPayload).catch(()=>null);
-          const saved = row || { ...toSave, items: setEditor.items };
-          if(typeof saved.items==='string') saved.items = JSON.parse(saved.items);
-          setSets(prev=>prev.map(s=>s.id===setEditor.id ? saved : s));
+        // Try UPDATE first; if row not found in DB, INSERT instead
+        const check = await db.getSets();
+        const exists = (check||[]).find(s=>s.id===setEditor.id);
+        if(exists) {
+          await db.updateSet(setEditor.id, toSave);
+          const refreshed = await db.getSets();
+          const updated = (refreshed||[]).find(s=>s.id===setEditor.id);
+          if(updated) {
+            const parsed = { ...updated, items: typeof updated.items==='string' ? JSON.parse(updated.items) : updated.items };
+            setSets(prev=>prev.map(s=>s.id===setEditor.id ? parsed : s));
+          }
         } else {
-          // UPDATE succeeded — refresh local state
-          const parsed = { ...updated, items: typeof updated.items==='string'
-            ? JSON.parse(updated.items) : updated.items };
-          setSets(prev=>prev.map(s=>s.id===setEditor.id ? parsed : s));
+          const { id: _dropId, ...insertPayload } = toSave;
+          const row = await db.addSet(insertPayload);
+          const saved = { ...row, items: typeof row.items==='string' ? JSON.parse(row.items) : row.items };
+          setSets(prev=>prev.map(s=>s.id===setEditor.id ? saved : s));
         }
       }
+      setModal(null);
+      setSetEditor(null);
     } catch(e){
-      // Fallback: save in-memory only
-      const toSaveMem = { ...setEditor, price: priceToSave, isNew: undefined };
-      if(isNew) setSets(prev=>[...prev, toSaveMem]);
-      else setSets(prev=>prev.map(s=>s.id===toSaveMem.id ? toSaveMem : s));
+      alert('Set could not be saved to database.\n\n'+e.message);
     }
-    setModal(null);
-    setSetEditor(null);
   };
 
   const deleteSet = async (id) => {
     if(!window.confirm('Delete this set?')) return;
-    try { const { db } = await import('@/lib/supabase'); await db.deleteSet(id).catch(()=>{}); } catch(e){}
-    setSets(prev=>prev.filter(s=>s.id!==id));
+    try {
+      const { db } = await import('@/lib/supabase');
+      await db.deleteSet(id);
+      setSets(prev=>prev.filter(s=>s.id!==id));
+    } catch(e){ alert('Delete failed: '+e.message); }
   };
 
   // ── DISPATCH STOCK TO LOCATION ─────────────────────────────
@@ -398,34 +388,37 @@ export default function Products({ products, setProducts }) {
           if(!p) continue;
           const deduct = item.qty * qty;
           const newStock = (p.stock||0) - deduct;
-          await db.updateProduct(p.id,{...p,stock:newStock}).catch(()=>{});
+          await db.updateProduct(p.id,{stock:newStock});
           setProducts(prev=>prev.map(x=>x.id===p.id?{...x,stock:newStock}:x));
         }
-      } catch(e){}
+      } catch(e){
+        setSaving(false);
+        return alert('Stock deduction failed — dispatch not saved.\n\n'+e.message);
+      }
 
       const expandedItems = set.items.map(i=>({product:i.product, qty:i.qty*qty}));
       const dispatch = {
-        id: Date.now(),
         date: form.date,
-        dispatchType: 'set',
-        setId: form.setId,
-        setName: set.name,
-        setQty: qty,
+        dispatch_type: 'set',
+        set_id: String(form.setId),
+        set_qty: qty,
         from_location: 'Kaduna (HQ)',
         to_location: form.to_location,
         dispatched_by: form.dispatched_by,
         notes: form.notes,
-        status: 'In Transit',
-        items: expandedItems,
+        items: JSON.stringify(expandedItems),
       };
       try {
         const { db } = await import('@/lib/supabase');
-        const row = await db.addDispatch({...dispatch, items:JSON.stringify(expandedItems)}).catch(()=>null);
-        setDispatches(prev=>[...prev, row?{...row,items:expandedItems}:dispatch]);
-      } catch(e){ setDispatches(prev=>[...prev, dispatch]); }
-      setModal(null);
-      setSaving(false);
-      alert(`Dispatched! ${qty} set(s) of "${set.name}" sent to ${form.to_location}`);
+        const row = await db.addDispatch(dispatch);
+        setDispatches(prev=>[...prev, {...row, items:expandedItems, dispatchType:'set', setName:set.name, setQty:qty, status:'In Transit'}]);
+        setModal(null);
+        setSaving(false);
+        alert(`Dispatched! ${qty} set(s) of "${set.name}" sent to ${form.to_location}`);
+      } catch(e){
+        setSaving(false);
+        alert('Dispatch failed — not saved to database.\n\n'+e.message);
+      }
 
     } else {
       // Dispatch single product
@@ -441,39 +434,43 @@ export default function Products({ products, setProducts }) {
       const newStock = (src.stock||0) - qty;
       try {
         const { db } = await import('@/lib/supabase');
-        await db.updateProduct(src.id,{...src,stock:newStock}).catch(()=>{});
-        setProducts(prev=>prev.map(p=>
-          p.id===src.id?{...p,stock:newStock}:p
-        ));
-      } catch(e){}
+        await db.updateProduct(src.id,{stock:newStock});
+        setProducts(prev=>prev.map(p=>p.id===src.id?{...p,stock:newStock}:p));
+      } catch(e){
+        setSaving(false);
+        return alert('Stock deduction failed — dispatch not saved.\n\n'+e.message);
+      }
 
       const dispatch = {
-        id: Date.now(),
         date: form.date,
-        dispatchType: 'single',
+        dispatch_type: 'single',
         product: form.product,
         from_location: 'Kaduna (HQ)',
         to_location: form.to_location,
         qty,
         dispatched_by: form.dispatched_by,
         notes: form.notes,
-        status: 'In Transit',
-        items: null,
       };
       try {
         const { db } = await import('@/lib/supabase');
-        const row = await db.addDispatch(dispatch).catch(()=>null);
-        setDispatches(prev=>[...prev, row||dispatch]);
-      } catch(e){ setDispatches(prev=>[...prev, dispatch]); }
-      setModal(null);
-      setSaving(false);
-      alert(`Dispatched! ${qty} units of ${form.product} sent to ${form.to_location}`);
+        const row = await db.addDispatch(dispatch);
+        setDispatches(prev=>[...prev, {...row, dispatchType:'single', status:'In Transit'}]);
+        setModal(null);
+        setSaving(false);
+        alert(`Dispatched! ${qty} units of ${form.product} sent to ${form.to_location}`);
+      } catch(e){
+        setSaving(false);
+        alert('Dispatch failed — not saved to database.\n\n'+e.message);
+      }
     }
   };
 
   const markDelivered = async (id) => {
-    try { const { db } = await import('@/lib/supabase'); await db.updateDispatch(id,{status:'Delivered'}).catch(()=>{}); } catch(e){}
-    setDispatches(prev=>prev.map(d=>d.id===id?{...d,status:'Delivered'}:d));
+    try {
+      const { db } = await import('@/lib/supabase');
+      await db.updateDispatch(id,{status:'Delivered'});
+      setDispatches(prev=>prev.map(d=>d.id===id?{...d,status:'Delivered'}:d));
+    } catch(e){ alert('Could not mark as delivered: '+e.message); }
   };
 
   // ── RECORD SALE FROM LOCATION ──────────────────────────────
@@ -500,26 +497,23 @@ export default function Products({ products, setProducts }) {
 
       const saleItems = set.items.map(i=>({product:i.product, qty:i.qty*qty}));
       const sale = {
-        id: Date.now(),
         date: form.date,
-        saleType: 'set',
-        setId: form.setId,
-        setName: set.name,
-        setQty: qty,
+        sale_type: 'set',
+        set_id: String(form.setId),
+        set_qty: qty,
         location: form.location,
         price: setPrice,
-        total,
         customer: form.customer,
         notes: form.notes,
-        items: saleItems,
+        items: JSON.stringify(saleItems),
       };
       try {
         const { db } = await import('@/lib/supabase');
-        const row = await db.addLocationSale({...sale, items:JSON.stringify(saleItems)}).catch(()=>null);
-        setLocationSales(prev=>[...prev, row?{...row,items:saleItems}:sale]);
-      } catch(e){ setLocationSales(prev=>[...prev, sale]); }
-      setModal(null);
-      alert(`Sale recorded! ${qty} set(s) sold at ${form.location} — Total: ${fmt(total)}`);
+        const row = await db.addLocationSale(sale);
+        setLocationSales(prev=>[...prev, {...row, items:saleItems, saleType:'set', setName:set.name, setQty:qty, total}]);
+        setModal(null);
+        alert(`Sale recorded! ${qty} set(s) sold at ${form.location} — Total: ${fmt(total)}`);
+      } catch(e){ alert('Sale could not be saved to database.\n\n'+e.message); }
 
     } else {
       if(!form.product||!form.location||!form.qty)
@@ -530,26 +524,22 @@ export default function Products({ products, setProducts }) {
       if(locationStock < qty)
         return alert(`Not enough stock at ${form.location}. Available: ${locationStock} units.`);
 
+      const saleTotal = qty * (Number(form.price)||0);
       const sale = {
-        id: Date.now(),
         date: form.date,
-        saleType: 'single',
-        items: null,
+        sale_type: 'single',
         product: form.product,
         location: form.location,
         qty,
         price: Number(form.price)||0,
-        total: qty * (Number(form.price)||0),
-        customer: form.customer,
-        notes: form.notes,
       };
       try {
         const { db } = await import('@/lib/supabase');
-        const row = await db.addLocationSale(sale).catch(()=>null);
-        setLocationSales(prev=>[...prev, row||sale]);
-      } catch(e){ setLocationSales(prev=>[...prev, sale]); }
-      setModal(null);
-      alert(`Sale recorded! ${qty} units sold at ${form.location}`);
+        const row = await db.addLocationSale(sale);
+        setLocationSales(prev=>[...prev, {...row, saleType:'single', total:saleTotal, customer:form.customer}]);
+        setModal(null);
+        alert(`Sale recorded! ${qty} units sold at ${form.location}`);
+      } catch(e){ alert('Sale could not be saved to database.\n\n'+e.message); }
     }
   };
 
