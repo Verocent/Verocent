@@ -1,8 +1,27 @@
 'use client';
 import { useState } from 'react';
 import { db } from '@/lib/supabase';
-import { RM_CATEGORIES } from '@/lib/constants';
-import { Card, Table, Badge, Btn, Input, Select, Modal, AlertBox, KPI, Grid, exportCSV, fmt, daysTo } from './ui';
+import { Card, Table, Badge, Btn, Input, Select, Modal, KPI, Grid, exportCSV, fmt, daysTo } from './ui';
+
+// ── Raw Material Categories (Verocent Pure Essence) ──────────────────────────
+const RM_CATEGORIES = [
+  'Butters',
+  'Essential Oils',
+  'Carrier Oils',
+  'Herbs & Spices',
+  'Extracts',
+  'Preservatives',
+  'Emulsifiers & Thickeners',
+  'Fragrance Oils',
+  'Colourants & Pigments',
+  'Water & Hydrosols',
+  'Packaging Bottle',
+  'Packaging Label',
+  'Packaging Carton',
+  'Packaging Nylon',
+  'Courier Bag',
+  'Other',
+];
 
 const blankRM  = { name:'', category:'', supplier:'', qty:'0', unit:'kg', cost:'', expiry:'', location:'', status:'Accepted', reorder:'10' };
 const blankSup = { name:'', contact:'', phone:'', email:'', materials:'', lead_time:'', rating:'5', compliance:'Compliant', location:'' };
@@ -52,7 +71,6 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
   };
 
   // ── FINISHED GOODS ─────────────────────────────
-    // ── FINISHED GOODS EDIT & DELETE ──────────────────
   const saveFG = async () => {
     if (!form.name || !form.price) return alert('Product name and price are required.');
     setSaving(true);
@@ -76,6 +94,7 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
     await db.deleteProduct(id).catch(()=>{});
     setProducts(prev => prev.filter(p => p.id !== id));
   };
+
   const adjustStock = async (p, type) => {
     const q = Number(prompt(`Enter quantity to ${type==='add'?'add to':'remove from'} ${p.name} stock:`));
     if (!q || q<=0) return;
@@ -131,10 +150,10 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
             <Btn key='e' small color='blue' onClick={()=>exportCSV(rawMaterials,'raw-materials.csv')}>⬇️ Export</Btn>,
           ]}>
           <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:16}}>
-            <KPI label='Total RM Value'    value={fmt(rawMaterials.reduce((s,r)=>s+(r.qty||0)*(r.cost||0),0))} color='#165C35' bg='#E8F5EE'/>
-            <KPI label='Materials in Stock' value={rawMaterials.length} color='#165C35' bg='#E8F5EE'/>
-            <KPI label='Low / Reorder'     value={rawMaterials.filter(r=>(r.qty||0)<=(r.reorder||10)).length} color='#C0392B' bg='#FADBD8'/>
-            <KPI label='Expiring (90 days)'value={rawMaterials.filter(r=>r.expiry&&daysTo(r.expiry)<=90).length} color='#E67E22' bg='#FEF9E7'/>
+            <KPI label='Total RM Value'     value={fmt(rawMaterials.reduce((s,r)=>s+(r.qty||0)*(r.cost||0),0))} color='#165C35' bg='#E8F5EE'/>
+            <KPI label='Materials in Stock' value={rawMaterials.length}                                          color='#165C35' bg='#E8F5EE'/>
+            <KPI label='Low / Reorder'      value={rawMaterials.filter(r=>(r.qty||0)<=(r.reorder||10)).length}  color='#C0392B' bg='#FADBD8'/>
+            <KPI label='Expiring (90 days)' value={rawMaterials.filter(r=>r.expiry&&daysTo(r.expiry)<=90).length} color='#E67E22' bg='#FEF9E7'/>
           </div>
           <Table
             headers={['Material','Category','Supplier','Qty','Unit','Unit Cost','Total Value','Expiry','Location','QC','Alert','Actions']}
@@ -163,7 +182,6 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
       )}
 
       {/* ── FINISHED GOODS ── */}
-            {/* ── FINISHED GOODS ── */}
       {tab==='finished' && (
         <Card title='Finished Goods Inventory' icon='📦'
           actions={[
@@ -213,7 +231,7 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
         </Card>
       )}
 
-      {/* Receive / Use Modal */}
+      {/* ── Receive / Use Modal ── */}
       {rmMove && (() => {
         const rm = rawMaterials.find(r=>r.id===rmMove.id);
         return (
@@ -238,29 +256,35 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
         );
       })()}
 
-      {/* Add/Edit Raw Material */}
+      {/* ── Add / Edit Raw Material ── */}
       {(modal==='add-rm'||modal==='edit-rm')&&(
-        <Modal title={modal==='add-rm'?'Add Raw Material':'Edit Raw Material'} onClose={()=>setModal(null)}>
+        <Modal title={modal==='add-rm'?'➕ Add Raw Material':'✏️ Edit Raw Material'} onClose={()=>setModal(null)}>
+          {/* Category hint bar */}
+          <div style={{background:'#E8F5EE',borderRadius:8,padding:'10px 14px',marginBottom:16,
+            fontSize:13,color:'#165C35',fontFamily:'sans-serif'}}>
+            💡 Choose the most specific category — e.g. <strong>Butters</strong>, <strong>Essential Oils</strong>,
+            <strong> Carrier Oils</strong>, or a packaging type like <strong>Packaging Carton</strong> or <strong>Courier Bag</strong>.
+          </div>
           <Grid cols={2}>
-            <Input label='Material Name' value={form.name} onChange={v=>f('name',v)} required/>
+            <Input label='Material Name *' value={form.name} onChange={v=>f('name',v)} required/>
             <Select label='Category' value={form.category} onChange={v=>f('category',v)} options={RM_CATEGORIES}/>
             <Input label='Supplier' value={form.supplier} onChange={v=>f('supplier',v)}/>
-            <Select label='Unit' value={form.unit} onChange={v=>f('unit',v)} options={['kg','g','L','ml','pcs','bottles','bags']}/>
+            <Select label='Unit' value={form.unit} onChange={v=>f('unit',v)} options={['kg','g','L','ml','pcs','bottles','bags','rolls','sheets']}/>
             <Input label='Quantity' type='number' value={form.qty} onChange={v=>f('qty',v)}/>
             <Input label='Unit Cost (₦)' type='number' value={form.cost} onChange={v=>f('cost',v)}/>
             <Input label='Expiry Date' type='date' value={form.expiry} onChange={v=>f('expiry',v)}/>
-            <Input label='Storage Location' value={form.location} onChange={v=>f('location',v)} placeholder='e.g. Store Room A'/>
+            <Input label='Storage Location' value={form.location} onChange={v=>f('location',v)} placeholder='e.g. Store Room A, Shelf 2'/>
             <Input label='Reorder Point' type='number' value={form.reorder} onChange={v=>f('reorder',v)}/>
             <Select label='QC Status' value={form.status} onChange={v=>f('status',v)} options={['Accepted','Rejected','Pending']}/>
           </Grid>
           <div style={{display:'flex',gap:10,marginTop:4}}>
-            <Btn onClick={saveRM} color='green' disabled={saving}>{saving?'Saving…':'Save Material'}</Btn>
+            <Btn onClick={saveRM} color='green' disabled={saving}>{saving?'Saving…':'💾 Save Material'}</Btn>
             <Btn onClick={()=>setModal(null)} color='grey' outline>Cancel</Btn>
           </div>
         </Modal>
       )}
 
-            {/* Edit Finished Good Modal */}
+      {/* ── Edit Finished Good ── */}
       {modal==='edit-fg'&&(
         <Modal title='✏️ Edit Finished Good' onClose={()=>setModal(null)}>
           <div style={{background:'#EBF5FB',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13,fontFamily:'sans-serif',color:'#1A56DB'}}>
@@ -284,16 +308,17 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
             </div>
           )}
           <div style={{display:'flex',gap:10}}>
-            <Btn onClick={saveFG} color='green' disabled={saving}>{saving?'Saving…':'Save Changes'}</Btn>
+            <Btn onClick={saveFG} color='green' disabled={saving}>{saving?'Saving…':'💾 Save Changes'}</Btn>
             <Btn onClick={()=>setModal(null)} color='grey' outline>Cancel</Btn>
           </div>
         </Modal>
       )}
-      {/* Add/Edit Supplier */}
+
+      {/* ── Add / Edit Supplier ── */}
       {(modal==='add-sup'||modal==='edit-sup')&&(
-        <Modal title={modal==='add-sup'?'Add Supplier':'Edit Supplier'} onClose={()=>setModal(null)}>
+        <Modal title={modal==='add-sup'?'➕ Add Supplier':'✏️ Edit Supplier'} onClose={()=>setModal(null)}>
           <Grid cols={2}>
-            <Input label='Supplier Name' value={form.name} onChange={v=>f('name',v)} required/>
+            <Input label='Supplier Name *' value={form.name} onChange={v=>f('name',v)} required/>
             <Input label='Contact Person' value={form.contact} onChange={v=>f('contact',v)}/>
             <Input label='Phone' value={form.phone} onChange={v=>f('phone',v)}/>
             <Input label='Email' value={form.email} onChange={v=>f('email',v)}/>
@@ -304,7 +329,7 @@ export default function Inventory({ rawMaterials, setRawMaterials, products, set
             <Select label='Compliance' value={form.compliance} onChange={v=>f('compliance',v)} options={['Compliant','Non-Compliant','Pending Review']}/>
           </Grid>
           <div style={{display:'flex',gap:10,marginTop:4}}>
-            <Btn onClick={saveSup} color='green' disabled={saving}>{saving?'Saving…':'Save Supplier'}</Btn>
+            <Btn onClick={saveSup} color='green' disabled={saving}>{saving?'Saving…':'💾 Save Supplier'}</Btn>
             <Btn onClick={()=>setModal(null)} color='grey' outline>Cancel</Btn>
           </div>
         </Modal>
