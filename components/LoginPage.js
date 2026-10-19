@@ -18,6 +18,12 @@ export default function LoginPage({ onLogin }) {
     try {
       const { supabase } = await import('@/lib/supabase');
 
+      if (!supabase) {
+        setError('Database not connected. Check your .env.local file has NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY, then restart the server.');
+        setLoading(false);
+        return;
+      }
+
       const { data: staffUser, error: staffError } = await supabase
         .from('staff_users')
         .select('*')
@@ -27,18 +33,16 @@ export default function LoginPage({ onLogin }) {
         .single();
 
       if (staffError || !staffUser) {
-  console.log('LOGIN ERROR:', staffError);
-  console.log('STAFF USER:', staffUser);
-
-  setError(
-    staffError
-      ? `Database error: ${staffError.message}`
-      : 'No matching staff account found.'
-  );
-
-  setLoading(false);
-  return;
-}
+        console.log('LOGIN ERROR:', staffError);
+        console.log('STAFF USER:', staffUser);
+        setError(
+          staffError
+            ? `Database error: ${staffError.message}`
+            : 'No matching staff account found. Check your email and password.'
+        );
+        setLoading(false);
+        return;
+      }
 
       await supabase.from('audit_logs').insert({
         user_email:  staffUser.email,
@@ -53,12 +57,9 @@ export default function LoginPage({ onLogin }) {
       onLogin(staffUser);
 
     } catch(err) {
-  console.error('LOGIN EXCEPTION:', err);
-  setError(`Login error: ${err?.message || String(err)}`);
-}
-
-
-
+      console.error('LOGIN EXCEPTION:', err);
+      setError(`Login error: ${err?.message || String(err)}`);
+    }
 
     setLoading(false);
   };
@@ -131,6 +132,7 @@ export default function LoginPage({ onLogin }) {
           font-size: 16px; font-family: inherit;
           outline: none; margin-bottom: 18px;
           -webkit-appearance: none;
+          box-sizing: border-box;
         }
         .login-input:focus { border-color: #1F6F43; }
         .pass-wrap { position: relative; }

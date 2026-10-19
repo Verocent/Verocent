@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PAYMENT_METHODS, DELIVERY_STATUSES } from '@/lib/constants';
 
 // ── Self-contained helpers ────────────────────────────────
@@ -10,27 +10,9 @@ const retId = () => `RET-${new Date().toISOString().replace(/-/g,'').substr(0,8)
 
 // ── Nigerian sales locations ──────────────────────────────
 const LOCATIONS = [
-  'Kaduna (HQ)',
-  'Abuja (FCT)',
-  'Lagos',
-  'Port Harcourt',
-  'Benin City',
-  'Warri',
-  'Sokoto',
-  'Kano',
-  'Anambra',
-  'Enugu',
-  'Ibadan',
-  'Owerri',
-  'Calabar',
-  'Uyo',
-  'Asaba',
-  'Maiduguri',
-  'Jos',
-  'Ilorin',
-  'Abeokuta',
-  'Online / Remote',
-  'Other',
+  'Kaduna (HQ)','Abuja (FCT)','Lagos','Port Harcourt','Benin City',
+  'Warri','Sokoto','Kano','Anambra','Enugu','Ibadan','Owerri',
+  'Calabar','Uyo','Asaba','Maiduguri','Jos','Ilorin','Abeokuta','Online / Remote','Other',
 ];
 
 function Badge({ label, color='green' }) {
@@ -134,7 +116,6 @@ const exportCSV = (data, filename) => {
   URL.revokeObjectURL(url);
 };
 
-// Invoice printer — includes location
 function printInvoice(sale) {
   const balance = (sale.total||0)-(sale.paid||0);
   const w = window.open('','_blank');
@@ -151,8 +132,6 @@ function printInvoice(sale) {
     .grand{font-size:18px;font-weight:bold;color:#1F6F43;border-top:2px solid #1F6F43;margin-top:8px;padding-top:8px}
     .owing{color:#C0392B;font-weight:bold}
     .paid-full{color:#1F6F43;font-weight:bold}
-    .location-badge{display:inline-block;background:#F5EEF8;color:#7D3C98;border-radius:12px;padding:2px 12px;font-size:12px;font-weight:bold;margin-left:8px}
-    .footer{margin-top:32px;padding-top:12px;border-top:1px solid #ccc;font-size:12px;color:#888;font-style:italic}
     @media print{.no-print{display:none}}
   </style></head><body>
   <h1>🌿 VEROCENT PURE ESSENCE</h1>
@@ -162,7 +141,7 @@ function printInvoice(sale) {
     <tr><td><strong>Invoice No:</strong></td><td>${sale.id}</td><td><strong>Date:</strong></td><td>${sale.date}</td></tr>
     <tr><td><strong>Customer:</strong></td><td>${sale.customer}</td><td><strong>Phone:</strong></td><td>${sale.phone||'N/A'}</td></tr>
     <tr><td><strong>Payment:</strong></td><td>${sale.method||'N/A'}</td><td><strong>Delivery:</strong></td><td>${sale.delivery||'N/A'}</td></tr>
-    <tr><td><strong>Sales Location:</strong></td><td colspan="3"><span class="location-badge">📍 ${sale.location||'Not specified'}</span></td></tr>
+    ${sale.location?`<tr><td><strong>Location:</strong></td><td colspan="3">📍 ${sale.location}</td></tr>`:''}
   </table>
   <table>
     <tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Total</th></tr>
@@ -178,7 +157,9 @@ function printInvoice(sale) {
       <span class="${balance>0?'owing':'paid-full'}">${balance>0?'₦'+Number(balance).toLocaleString()+' OUTSTANDING':'FULLY PAID ✓'}</span>
     </div>
   </div>
-  <div class="footer"><p>Pure Care with Verocent — Nature's Touch for Healthy Hair 🌿</p></div>
+  <div style="margin-top:32px;padding-top:12px;border-top:1px solid #ccc;font-size:12px;color:#888;font-style:italic">
+    <p>Pure Care with Verocent — Nature's Touch for Healthy Hair 🌿</p>
+  </div>
   <div class="no-print" style="margin-top:20px;display:flex;gap:12px">
     <button onclick="window.print()" style="background:#1F6F43;color:white;padding:10px 24px;border:none;border-radius:6px;cursor:pointer;font-size:14px;font-weight:bold">🖨️ Print</button>
     <button onclick="window.close()" style="background:#eee;color:#333;padding:10px 24px;border:none;border-radius:6px;cursor:pointer;font-size:14px">Close</button>
@@ -187,7 +168,6 @@ function printInvoice(sale) {
   w.document.close();
 }
 
-// ── Blank forms ───────────────────────────────────────────
 const blankSale = {
   date:today(), customer:'', phone:'', product:'', qty:'1',
   price:'', discount:'0', paid:'', method:'Bank Transfer',
@@ -200,15 +180,16 @@ const blankReturn = {
   refund_amount:'0', recorded_by:'Veronica', notes:''
 };
 
-export default function Sales({ sales, setSales, customers, setCustomers, products, setProducts }) {
-  const [tab,          setTab]          = useState('log');
-  const [modal,        setModal]        = useState(null);
-  const [form,         setForm]         = useState({});
-  const [saving,       setSaving]       = useState(false);
-  const [invSale,      setInvSale]      = useState(null);
-  const [filter,       setFilter]       = useState('All');
-  const [locFilter,    setLocFilter]    = useState('All');
-  const [returns,      setReturns]      = useState([]);
+// ── MAIN COMPONENT ───────────────────────────────────────
+// returns and setReturns now come from parent (page.js loads from Supabase)
+export default function Sales({ sales, setSales, customers, setCustomers, products, setProducts, returns=[], setReturns }) {
+  const [tab,       setTab]       = useState('log');
+  const [modal,     setModal]     = useState(null);
+  const [form,      setForm]      = useState({});
+  const [saving,    setSaving]    = useState(false);
+  const [invSale,   setInvSale]   = useState(null);
+  const [filter,    setFilter]    = useState('All');
+  const [locFilter, setLocFilter] = useState('All');
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
   const calcTotal = fm => Math.max(0,(Number(fm.qty||1)*Number(fm.price||0))-Number(fm.discount||0));
@@ -228,23 +209,13 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
       if(modal==='add-sale') {
         const row = await db.addSale(payload).catch(()=>null);
         setSales(prev=>[...prev, row||payload]);
-
-        // ── AUTO DEDUCT STOCK ──────────────────────────
+        // Auto-deduct stock
         const soldProduct = products.find(p => p.name === payload.product);
         if(soldProduct && soldProduct.id) {
-          const newStock = Math.max(0,
-            (Number(soldProduct.stock)||0) - (Number(payload.qty)||1)
-          );
-          await db.updateProduct(soldProduct.id, {
-            ...soldProduct,
-            stock: newStock
-          }).catch(()=>{});
-          setProducts(prev => prev.map(p =>
-            p.id === soldProduct.id ? {...p, stock: newStock} : p
-          ));
+          const newStock = Math.max(0,(Number(soldProduct.stock)||0)-(Number(payload.qty)||1));
+          await db.updateProduct(soldProduct.id, {...soldProduct, stock:newStock}).catch(()=>{});
+          setProducts(prev=>prev.map(p=>p.id===soldProduct.id?{...p,stock:newStock}:p));
         }
-        // ──────────────────────────────────────────────
-
       } else {
         await db.updateSale(form.id, payload).catch(()=>{});
         setSales(prev=>prev.map(s=>s.id===form.id?payload:s));
@@ -255,7 +226,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
   };
 
   const delSale = async (id) => {
-    if(!window.confirm('Delete this sale record? This cannot be undone.')) return;
+    if(!window.confirm('Delete this sale record?')) return;
     try { const { db } = await import('@/lib/supabase'); await db.deleteSale(id).catch(()=>{}); } catch(e){}
     setSales(prev=>prev.filter(s=>s.id!==id));
   };
@@ -285,26 +256,48 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
     setCustomers(prev=>prev.filter(c=>c.id!==id));
   };
 
-  // ── RETURNS CRUD ──────────────────────────────────────
-  const saveReturn = () => {
+  // ── RETURNS CRUD — NOW SAVES TO SUPABASE ─────────────
+  const saveReturn = async () => {
     if(!form.customer||!form.product) return alert('Customer and Product are required.');
+    setSaving(true);
     const payload = {
       ...form,
-      return_id: form.return_id||retId(),
+      return_id: form.return_id || retId(),
       qty: Number(form.qty)||1,
       refund_amount: Number(form.refund_amount)||0,
-      id: form.id||Date.now(),
     };
-    if(modal==='add-return') {
-      setReturns(prev=>[...prev, payload]);
-    } else {
-      setReturns(prev=>prev.map(r=>r.id===form.id?payload:r));
-    }
-    setModal(null);
+    // Remove local id if present (let Supabase assign it)
+    delete payload.id;
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      );
+      if(modal==='add-return') {
+        const { data, error } = await supabase.from('returns').insert(payload).select().single();
+        if(error) throw error;
+        setReturns(prev=>[...prev, data||payload]);
+      } else {
+        const { error } = await supabase.from('returns').update(payload).eq('id', form.id);
+        if(error) throw error;
+        setReturns(prev=>prev.map(r=>r.id===form.id?{...payload,id:form.id}:r));
+      }
+      setModal(null);
+    } catch(e) { alert('Error saving return: '+e.message); }
+    setSaving(false);
   };
 
-  const delReturn = (id, rId) => {
+  const delReturn = async (id, rId) => {
     if(!window.confirm(`Delete return record ${rId}?`)) return;
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      );
+      await supabase.from('returns').delete().eq('id', id);
+    } catch(e){ console.error(e); }
     setReturns(prev=>prev.filter(r=>r.id!==id));
   };
 
@@ -313,8 +306,6 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
   const totalPaid   = sales.reduce((s,x)=>s+(x.paid||0),0);
   const totalOut    = sales.reduce((s,x)=>s+((x.total||0)-(x.paid||0)),0);
   const totalRefund = returns.reduce((s,r)=>s+(r.refund_amount||0),0);
-
-  // ── Location breakdown ───────────────────────────────
   const activeLocations = [...new Set(sales.map(s=>s.location||'Unspecified').filter(Boolean))].sort();
   const locationStats = activeLocations.map(loc => {
     const locSales = sales.filter(s=>(s.location||'Unspecified')===loc);
@@ -327,7 +318,6 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
     };
   }).sort((a,b)=>b.revenue-a.revenue);
 
-  // ── Filter chain: status + location ──────────────────
   let filtered = sales;
   if(filter!=='All')    filtered = filtered.filter(s=>s.status===filter);
   if(locFilter!=='All') filtered = filtered.filter(s=>(s.location||'Unspecified')===locFilter);
@@ -382,7 +372,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               </div>
             </div>
 
-            {/* Status filter bar */}
+            {/* Status filter */}
             <div style={{padding:'10px 20px 0',borderBottom:'1px solid #C9C9C0',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:12,fontWeight:700,fontFamily:'sans-serif',color:'#666'}}>Payment:</span>
               {['All','Paid','Partial','Unpaid'].map(fil=>(
@@ -397,7 +387,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               ))}
             </div>
 
-            {/* Location filter bar */}
+            {/* Location filter */}
             <div style={{padding:'8px 20px 10px',borderBottom:'1px solid #C9C9C0',display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:12,fontWeight:700,fontFamily:'sans-serif',color:'#666'}}>📍 Location:</span>
               <button onClick={()=>setLocFilter('All')}
@@ -434,7 +424,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                 <tbody>
                   {filtered.length===0?(
                     <tr><td colSpan={12} style={{padding:32,textAlign:'center',color:'#888',fontFamily:'sans-serif'}}>
-                      No sales records match this filter. Click + New Sale to start.
+                      No sales records yet. Click + New Sale to start.
                     </td></tr>
                   ):filtered.map((s,i)=>(
                     <tr key={s.id} style={{background:i%2===0?'#E8F5EE':'#fff'}}>
@@ -453,8 +443,8 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                       <TD center><Badge label={s.delivery} color={s.delivery==='Delivered'?'green':s.delivery==='In Transit'?'blue':'amber'}/></TD>
                       <td style={{padding:'9px 12px'}}>
                         <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                          <Btn small color='green' onClick={()=>{ setInvSale(s); }}>🧾 Invoice</Btn>
-                          <Btn small color='blue'  onClick={()=>{ setForm({...s,qty:String(s.qty),price:String(s.price),discount:String(s.discount||0),paid:String(s.paid),location:s.location||''}); setModal('edit-sale'); }}>✏️ Edit</Btn>
+                          <Btn small color='green' onClick={()=>setInvSale(s)}>🧾 Invoice</Btn>
+                          <Btn small color='blue'  onClick={()=>{setForm({...s,qty:String(s.qty),price:String(s.price),discount:String(s.discount||0),paid:String(s.paid),location:s.location||''});setModal('edit-sale');}}>✏️ Edit</Btn>
                           <Btn small color='red'   onClick={()=>delSale(s.id)}>🗑 Del</Btn>
                         </div>
                       </td>
@@ -470,7 +460,6 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
       {/* ══ BY LOCATION ══ */}
       {tab==='locations'&&(
         <div>
-          {/* Summary KPIs */}
           <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:20}}>
             <KPI label='Total Revenue'     value={fmt(totalRev)}   sub={`${sales.length} total orders`}/>
             <KPI label='Cash Collected'    value={fmt(totalPaid)}/>
@@ -478,12 +467,10 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
             <KPI label='Locations Active'  value={activeLocations.length} color='#7D3C98' bg='#F5EEF8'/>
           </div>
 
-          {/* Location cards */}
           {locationStats.length===0?(
             <div style={{background:'#fff',borderRadius:14,border:'1px solid #C9C9C0',padding:40,textAlign:'center',color:'#888',fontFamily:'sans-serif'}}>
               <div style={{fontSize:40,marginBottom:12}}>📍</div>
               <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>No location data yet</div>
-              <div style={{fontSize:13,color:'#aaa',marginBottom:20}}>When you record a sale with a location, it will appear here with a revenue breakdown.</div>
               <Btn color='gold' onClick={()=>{setTab('log');setTimeout(()=>{setForm({...blankSale});setModal('add-sale');},100);}}>+ Record First Sale</Btn>
             </div>
           ):(
@@ -491,8 +478,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               {locationStats.map(({loc,count,revenue,collected,outstanding})=>{
                 const pct = revenue>0?Math.round((collected/revenue)*100):0;
                 return (
-                  <div key={loc} style={{background:'#fff',borderRadius:14,border:'2px solid #E8D5F5',
-                    overflow:'hidden',boxShadow:'0 2px 8px rgba(125,60,152,0.08)'}}>
+                  <div key={loc} style={{background:'#fff',borderRadius:14,border:'2px solid #E8D5F5',overflow:'hidden'}}>
                     <div style={{background:'linear-gradient(135deg,#7D3C98,#5D2D72)',padding:'14px 18px',
                       display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                       <div>
@@ -502,7 +488,6 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                       <div style={{color:'#F9E4B7',fontSize:18,fontWeight:800,fontFamily:'sans-serif'}}>{fmt(revenue)}</div>
                     </div>
                     <div style={{padding:'14px 18px'}}>
-                      {/* Collection progress bar */}
                       <div style={{marginBottom:12}}>
                         <div style={{display:'flex',justifyContent:'space-between',fontSize:11,fontFamily:'sans-serif',color:'#888',marginBottom:4}}>
                           <span>Collection rate</span><span style={{fontWeight:700,color:'#165C35'}}>{pct}%</span>
@@ -534,48 +519,6 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               })}
             </div>
           )}
-
-          {/* Location comparison table */}
-          {locationStats.length>1&&(
-            <div style={{background:'#fff',borderRadius:14,border:'1px solid #C9C9C0',overflow:'hidden',marginTop:24}}>
-              <div style={{background:'#7D3C98',padding:'12px 20px'}}>
-                <span style={{color:'#fff',fontWeight:700,fontSize:14,fontFamily:'sans-serif'}}>📊 Location Comparison</span>
-              </div>
-              <div style={{overflowX:'auto'}}>
-                <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
-                  <thead><tr>
-                    {['Rank','Location','Orders','Revenue','Collected','Outstanding','Collection %'].map(h=>(
-                      <th key={h} style={{background:'#F5EEF8',color:'#7D3C98',padding:'9px 14px',
-                        textAlign:h==='Location'||h==='Rank'?'left':'center',
-                        fontSize:11,textTransform:'uppercase',whiteSpace:'nowrap',fontFamily:'sans-serif'}}>{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody>
-                    {locationStats.map(({loc,count,revenue,collected,outstanding},i)=>{
-                      const pct = revenue>0?Math.round((collected/revenue)*100):0;
-                      return (
-                        <tr key={loc} style={{background:i%2===0?'#F9F5FC':'#fff'}}>
-                          <td style={{padding:'9px 14px',fontWeight:800,color:'#7D3C98',fontFamily:'sans-serif',fontSize:14}}>#{i+1}</td>
-                          <td style={{padding:'9px 14px',fontWeight:700,fontFamily:'sans-serif',fontSize:13}}>📍 {loc}</td>
-                          <td style={{padding:'9px 14px',textAlign:'center',fontFamily:'sans-serif',fontSize:13}}>{count}</td>
-                          <td style={{padding:'9px 14px',textAlign:'center',fontWeight:700,color:'#165C35',fontFamily:'sans-serif',fontSize:13}}>{fmt(revenue)}</td>
-                          <td style={{padding:'9px 14px',textAlign:'center',color:'#165C35',fontFamily:'sans-serif',fontSize:13}}>{fmt(collected)}</td>
-                          <td style={{padding:'9px 14px',textAlign:'center',color:outstanding>0?'#C0392B':'#165C35',fontWeight:outstanding>0?700:400,fontFamily:'sans-serif',fontSize:13}}>{fmt(outstanding)}</td>
-                          <td style={{padding:'9px 14px',textAlign:'center'}}>
-                            <span style={{background:pct>=90?'#E8F5EE':pct>=50?'#FEF9E7':'#FADBD8',
-                              color:pct>=90?'#165C35':pct>=50?'#E67E22':'#C0392B',
-                              borderRadius:20,padding:'2px 10px',fontSize:12,fontWeight:700,fontFamily:'sans-serif'}}>
-                              {pct}%
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -588,9 +531,6 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               <Btn small color='gold' onClick={()=>{setForm({...blankCust});setModal('add-cust');}}>+ Add Customer</Btn>
               <Btn small color='blue' onClick={()=>exportCSV(customers,'customers.csv')}>⬇️ Export CSV</Btn>
             </div>
-          </div>
-          <div style={{padding:'10px 16px',background:'#E8F5EE',fontSize:13,color:'#165C35',fontFamily:'sans-serif',borderBottom:'1px solid #C9C9C0'}}>
-            💡 Click <strong>Export CSV</strong> to download all customer contacts for WhatsApp or email marketing.
           </div>
           <div style={{padding:20,overflowX:'auto'}}>
             <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
@@ -629,7 +569,6 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
       {/* ══ RETURNS ══ */}
       {tab==='returns'&&(
         <div>
-          {/* Returns KPIs */}
           <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:16}}>
             <KPI label='Total Returns'   value={returns.length}/>
             <KPI label='Total Refunded'  value={fmt(totalRefund)} color='#C0392B' bg='#FADBD8'/>
@@ -646,17 +585,14 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                 <Btn small color='blue' onClick={()=>exportCSV(returns,'returns-log.csv')}>⬇️ Export CSV</Btn>
               </div>
             </div>
-
             <div style={{padding:'12px 16px',background:'#FEF9E7',fontSize:13,color:'#92400E',fontFamily:'sans-serif',borderBottom:'1px solid #C9C9C0'}}>
-              ℹ️ <strong>How Returns Work:</strong> Log every product return here — whether it is a refund, exchange, or store credit. This keeps your records clean and helps track product quality issues.
+              ✅ Returns are now saved permanently to the database — they will not disappear on refresh.
             </div>
-
             <div style={{padding:20,overflowX:'auto'}}>
               {returns.length===0?(
                 <div style={{padding:40,textAlign:'center',color:'#888',fontFamily:'sans-serif'}}>
                   <div style={{fontSize:40,marginBottom:12}}>✅</div>
                   <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>No returns recorded</div>
-                  <div style={{fontSize:13,marginBottom:20,color:'#aaa'}}>This is great! When a customer returns a product, click the button below to log it.</div>
                   <Btn color='gold' onClick={()=>{setForm({...blankReturn,return_id:retId()});setModal('add-return');}}>+ Log First Return</Btn>
                 </div>
               ):(
@@ -668,7 +604,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                   </tr></thead>
                   <tbody>
                     {returns.map((r,i)=>(
-                      <tr key={r.id} style={{background:i%2===0?'#FADBD8':'#fff'}}>
+                      <tr key={r.id||r.return_id} style={{background:i%2===0?'#FADBD8':'#fff'}}>
                         <TD><code style={{fontSize:10,background:'#FDF6E3',padding:'2px 5px',borderRadius:4,fontWeight:700,color:'#C0392B'}}>{r.return_id}</code></TD>
                         <TD>{r.date}</TD>
                         <TD bold>{r.customer}</TD>
@@ -718,8 +654,8 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                     </div>
                   ))}
                   {invSale.location&&(
-                    <div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8}}>
-                      <span style={{fontSize:11,color:'#888',fontWeight:700,fontFamily:'sans-serif'}}>Sales Location: </span>
+                    <div style={{gridColumn:'1/-1'}}>
+                      <span style={{fontSize:11,color:'#888',fontWeight:700,fontFamily:'sans-serif'}}>Location: </span>
                       <span style={{background:'#F5EEF8',color:'#7D3C98',borderRadius:12,padding:'2px 10px',fontSize:12,fontWeight:700,fontFamily:'sans-serif'}}>📍 {invSale.location}</span>
                     </div>
                   )}
@@ -757,8 +693,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
                 <Btn color='blue'  onClick={()=>printInvoice(invSale)}>⬇️ Save as PDF</Btn>
                 <Btn color='gold'  onClick={()=>{
                   const balance=(invSale.total||0)-(invSale.paid||0);
-                  const locLine=invSale.location?`\nLocation: ${invSale.location}`:'';
-                  const text=`*VEROCENT PURE ESSENCE — INVOICE*\nInvoice: ${invSale.id}\nCustomer: ${invSale.customer}\nProduct: ${invSale.product}${locLine}\nTotal: ${fmt(invSale.total)}\nPaid: ${fmt(invSale.paid)}\nBalance: ${balance>0?fmt(balance)+' OUTSTANDING':'FULLY PAID ✓'}`;
+                  const text=`*VEROCENT PURE ESSENCE — INVOICE*\nInvoice: ${invSale.id}\nCustomer: ${invSale.customer}\nProduct: ${invSale.product}${invSale.location?'\nLocation: '+invSale.location:''}\nTotal: ${fmt(invSale.total)}\nPaid: ${fmt(invSale.paid)}\nBalance: ${balance>0?fmt(balance)+' OUTSTANDING':'FULLY PAID ✓'}`;
                   if(navigator.share){navigator.share({title:'Invoice',text});}
                   else{navigator.clipboard.writeText(text).then(()=>alert('Copied — paste into WhatsApp!'));}
                 }}>📤 Share WhatsApp</Btn>
@@ -794,11 +729,10 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
               {' '}| Paid: {fmt(form.paid||0)}
               {' '}| Balance: <span style={{color:'#C0392B',fontWeight:700}}>{fmt(calcTotal(form)-Number(form.paid||0))}</span>
               {' '}| Status: <strong>{Number(form.paid||0)>=calcTotal(form)?'✅ Paid':Number(form.paid||0)>0?'⏳ Partial':'❌ Unpaid'}</strong>
-              {form.location&&<span style={{marginLeft:12}}>| 📍 <span style={{color:'#7D3C98',fontWeight:700}}>{form.location}</span></span>}
             </div>
           )}
           <div style={{display:'flex',gap:10}}>
-            <Btn onClick={saveSale} color='green' disabled={saving}>{saving?'Saving…':'Save & Generate Invoice'}</Btn>
+            <Btn onClick={saveSale} color='green' disabled={saving}>{saving?'Saving…':'💾 Save & Generate Invoice'}</Btn>
             <Btn onClick={()=>setModal(null)} color='grey' outline>Cancel</Btn>
           </div>
         </Modal>
@@ -816,7 +750,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
             <Select label='Category' value={form.category} onChange={v=>f('category',v)} options={['VIP','Regular','New','Inactive']}/>
           </div>
           <div style={{display:'flex',gap:10,marginTop:4}}>
-            <Btn onClick={saveCust} color='green' disabled={saving}>{saving?'Saving…':'Save Customer'}</Btn>
+            <Btn onClick={saveCust} color='green' disabled={saving}>{saving?'Saving…':'💾 Save Customer'}</Btn>
             <Btn onClick={()=>setModal(null)} color='grey' outline>Cancel</Btn>
           </div>
         </Modal>
@@ -826,7 +760,7 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
       {(modal==='add-return'||modal==='edit-return')&&(
         <Modal title={modal==='add-return'?'↩️ Log New Return':'✏️ Edit Return Record'} onClose={()=>setModal(null)}>
           <div style={{background:'#FADBD8',borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:13,fontFamily:'sans-serif',color:'#C0392B'}}>
-            ℹ️ Record the full details of this return so your stock and financial records stay accurate.
+            ℹ️ This return will be saved permanently to the database.
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
             <Input label='Return ID' value={form.return_id} onChange={v=>f('return_id',v)}/>
@@ -842,9 +776,9 @@ export default function Sales({ sales, setSales, customers, setCustomers, produc
             <Select label='Reason for Return' value={form.reason} onChange={v=>f('reason',v)} options={['Wrong Product Delivered','Product Damaged','Customer Changed Mind','Allergic Reaction','Expired Product','Other']}/>
             <Input label='Recorded By' value={form.recorded_by} onChange={v=>f('recorded_by',v)}/>
           </div>
-          <Textarea label='Additional Notes' value={form.notes} onChange={v=>f('notes',v)} placeholder='Any additional observations about this return...'/>
+          <Textarea label='Additional Notes' value={form.notes} onChange={v=>f('notes',v)} placeholder='Any additional observations...'/>
           <div style={{display:'flex',gap:10}}>
-            <Btn onClick={saveReturn} color='green' disabled={saving}>{saving?'Saving…':modal==='add-return'?'Log Return':'Save Changes'}</Btn>
+            <Btn onClick={saveReturn} color='green' disabled={saving}>{saving?'Saving…':modal==='add-return'?'💾 Log Return':'💾 Save Changes'}</Btn>
             <Btn onClick={()=>setModal(null)} color='grey' outline>Cancel</Btn>
           </div>
         </Modal>

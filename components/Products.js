@@ -322,12 +322,17 @@ export default function Products({ products, setProducts }) {
     const priceToSave = Number(setEditor.price)||computeSetPrice(setEditor.id);
     const { isNew, ...rest } = setEditor;
     const toSave = { ...rest, price: priceToSave, items: JSON.stringify(setEditor.items) };
+    // Local version always has parsed items — used as fallback if DB returns null
+    const localVersion = { ...rest, price: priceToSave, items: setEditor.items };
     try {
       const { db } = await import('@/lib/supabase');
       if(isNew) {
         const { id: _dropId, ...insertPayload } = toSave;
         const row = await db.addSet(insertPayload);
-        const saved = { ...row, items: typeof row.items==='string' ? JSON.parse(row.items) : row.items };
+        // row may be null if RLS blocks the SELECT-back — use localVersion as fallback
+        const saved = row
+          ? { ...row, items: typeof row.items==='string' ? JSON.parse(row.items) : (row.items || setEditor.items) }
+          : { ...localVersion, id: Date.now() };
         setSets(prev=>[...prev, saved]);
       } else {
         // Try UPDATE first; if row not found in DB, INSERT instead
@@ -338,13 +343,18 @@ export default function Products({ products, setProducts }) {
           const refreshed = await db.getSets();
           const updated = (refreshed||[]).find(s=>s.id===setEditor.id);
           if(updated) {
-            const parsed = { ...updated, items: typeof updated.items==='string' ? JSON.parse(updated.items) : updated.items };
+            const parsed = { ...updated, items: typeof updated.items==='string' ? JSON.parse(updated.items) : (updated.items || setEditor.items) };
             setSets(prev=>prev.map(s=>s.id===setEditor.id ? parsed : s));
+          } else {
+            // DB update succeeded but SELECT-back returned nothing — use local
+            setSets(prev=>prev.map(s=>s.id===setEditor.id ? localVersion : s));
           }
         } else {
           const { id: _dropId, ...insertPayload } = toSave;
           const row = await db.addSet(insertPayload);
-          const saved = { ...row, items: typeof row.items==='string' ? JSON.parse(row.items) : row.items };
+          const saved = row
+            ? { ...row, items: typeof row.items==='string' ? JSON.parse(row.items) : (row.items || setEditor.items) }
+            : { ...localVersion };
           setSets(prev=>prev.map(s=>s.id===setEditor.id ? saved : s));
         }
       }
