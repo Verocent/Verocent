@@ -1,228 +1,212 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
-function Badge({ label, color='green' }) {
-  const map = {
-    green:{b:'#E8F5EE',t:'#165C35'}, red:{b:'#FADBD8',t:'#C0392B'},
-    amber:{b:'#FEF9E7',t:'#E67E22'}, gold:{b:'#FDF6E3',t:'#7D4E00'},
-    blue:{b:'#EBF5FB',t:'#1A56DB'}, navy:{b:'#E8ECF0',t:'#1B2631'},
-  };
-  const s = map[color]||map.green;
-  return <span style={{background:s.b,color:s.t,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>{label}</span>;
+// Format timestamp: "Mon 19 Oct 2026 — 10:45:32 PM"
+function fmtTime(ts) {
+  if (!ts) return '—';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleString('en-NG', {
+      weekday: 'short',
+      day:     'numeric',
+      month:   'short',
+      year:    'numeric',
+      hour:    '2-digit',
+      minute:  '2-digit',
+      second:  '2-digit',
+      hour12:  true,
+      timeZone: 'Africa/Lagos',
+    });
+  } catch { return ts; }
 }
 
-function KPI({ label, value, color='#165C35', bg='#E8F5EE' }) {
-  return (
-    <div style={{background:bg,borderRadius:12,padding:'14px 18px',flex:1,minWidth:130,borderLeft:`4px solid ${color}`}}>
-      <div style={{fontSize:10,color:'#666',textTransform:'uppercase',letterSpacing:1,marginBottom:5,fontFamily:'sans-serif'}}>{label}</div>
-      <div style={{fontSize:20,fontWeight:800,color,fontFamily:'sans-serif'}}>{value}</div>
-    </div>
-  );
+// How long ago: "3 mins ago", "2 hrs ago"
+function timeAgo(ts) {
+  if (!ts) return '';
+  const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (diff < 60)   return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400)return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
 }
 
-const exportCSV = (data, filename) => {
-  if (!data?.length) return;
-  const h = Object.keys(data[0]).join(',');
-  const r = data.map(row=>Object.values(row).map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob = new Blob([h+'\n'+r],{type:'text/csv'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href=url; a.download=filename; a.click();
-  URL.revokeObjectURL(url);
+const ACTION_COLORS = {
+  LOGIN:   { bg:'#E8F5EE', text:'#165C35', icon:'🔓' },
+  LOGOUT:  { bg:'#FEF9E7', text:'#7D4E00', icon:'🚪' },
+  CREATE:  { bg:'#EBF5FB', text:'#1A56DB', icon:'➕' },
+  UPDATE:  { bg:'#FDF6E3', text:'#7D4E00', icon:'✏️' },
+  DELETE:  { bg:'#FADBD8', text:'#C0392B', icon:'🗑' },
+  EXPORT:  { bg:'#F4F3EE', text:'#555',   icon:'⬇️' },
+  DEFAULT: { bg:'#F4F3EE', text:'#555',   icon:'📌' },
 };
 
-const actionColor = a => a==='LOGIN'?'green':a==='LOGOUT'?'navy':a==='DELETE'?'red':a==='UPDATE'?'amber':'blue';
-const actionIcon  = a => a==='LOGIN'?'🔐':a==='LOGOUT'?'🚪':a==='DELETE'?'🗑️':a==='UPDATE'?'✏️':a==='CREATE'?'➕':'📋';
+function ActionBadge({ action }) {
+  const c = ACTION_COLORS[action?.toUpperCase()] || ACTION_COLORS.DEFAULT;
+  return (
+    <span style={{background:c.bg,color:c.text,borderRadius:20,padding:'3px 10px',
+      fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>
+      {c.icon} {action}
+    </span>
+  );
+}
 
-export default function AuditLog({ currentUser }) {
-  const [logs,       setLogs]       = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [search,     setSearch]     = useState('');
-  const [filterAction, setFilterAction] = useState('All');
-  const [filterUser,   setFilterUser]   = useState('All');
+export default function AuditLog() {
+  const [logs,      setLogs]      = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState('');
+  const [filter,    setFilter]    = useState('');     // search text
+  const [actionFilter, setActionFilter] = useState('ALL');
+  const [page,      setPage]      = useState(1);
+  const PER_PAGE = 50;
 
-  useEffect(() => { loadLogs(); }, []);
+  useEffect(() => {
+    const fetchLogs = async () => {
+      setLoading(true);
+      try {
+        const supabase = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        );
+        const { data, error: err } = await supabase
+          .from('audit_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(500);
+        if (err) throw err;
+        setLogs(data || []);
+      } catch (e) {
+        setError('Could not load audit log: ' + e.message);
+      }
+      setLoading(false);
+    };
+    fetchLogs();
+  }, []);
 
-  const loadLogs = async () => {
-    setLoading(true);
-    try {
-      const { supabase } = await import('@/lib/supabase');
-      const { data } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(500);
-      setLogs(data || []);
-    } catch(e) { console.error(e); }
-    setLoading(false);
-  };
-
+  // Filter logs
   const filtered = logs.filter(l => {
-    const matchAction = filterAction==='All' || l.action===filterAction;
-    const matchUser   = filterUser==='All'   || l.user_name===filterUser;
-    const matchSearch = !search ||
-      l.user_name?.toLowerCase().includes(search.toLowerCase()) ||
-      l.description?.toLowerCase().includes(search.toLowerCase()) ||
-      l.module?.toLowerCase().includes(search.toLowerCase());
-    return matchAction && matchUser && matchSearch;
+    const matchText = !filter || [l.action,l.module,l.description,l.user_name]
+      .some(v => v?.toLowerCase().includes(filter.toLowerCase()));
+    const matchAction = actionFilter === 'ALL' || l.action?.toUpperCase() === actionFilter;
+    return matchText && matchAction;
   });
 
-  const uniqueUsers   = [...new Set(logs.map(l=>l.user_name))].filter(Boolean);
-  const uniqueActions = [...new Set(logs.map(l=>l.action))].filter(Boolean);
-  const todayLogs     = logs.filter(l=>l.created_at?.startsWith(new Date().toISOString().split('T')[0]));
-  const loginCount    = logs.filter(l=>l.action==='LOGIN').length;
-  const failCount     = logs.filter(l=>l.status==='Failed').length;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const paginated  = filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);
 
-  const formatTime = ts => {
-    if (!ts) return '—';
-    const d = new Date(ts);
-    return d.toLocaleDateString('en-NG',{day:'2-digit',month:'short',year:'numeric'})
-      +' '+d.toLocaleTimeString('en-NG',{hour:'2-digit',minute:'2-digit'});
-  };
-
-  const TH = ({children}) => (
-    <th style={{background:'#165C35',color:'#fff',padding:'9px 12px',
-      textAlign:'left',fontSize:11,textTransform:'uppercase',
-      whiteSpace:'nowrap',fontFamily:'sans-serif'}}>{children}</th>
-  );
+  const actionTypes = ['ALL', 'LOGIN', 'LOGOUT', 'CREATE', 'UPDATE', 'DELETE', 'EXPORT'];
 
   return (
     <div>
-      {/* Header */}
-      <div style={{background:'linear-gradient(135deg,#1B2631,#165C35)',
-        borderRadius:14,padding:'20px 24px',marginBottom:20,
-        display:'flex',justifyContent:'space-between',
-        alignItems:'center',flexWrap:'wrap',gap:12}}>
-        <div>
-          <div style={{color:'#D4A017',fontWeight:800,fontSize:18,fontFamily:'sans-serif'}}>🔍 Audit Log</div>
-          <div style={{color:'rgba(255,255,255,0.6)',fontSize:13,fontFamily:'sans-serif',marginTop:4}}>
-            Complete record of all staff activity in Verocent ERP
-          </div>
-        </div>
-        <div style={{display:'flex',gap:8}}>
-          <button onClick={loadLogs}
-            style={{background:'#1A56DB',color:'#fff',border:'none',borderRadius:7,
-              padding:'8px 16px',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'sans-serif'}}>
-            🔄 Refresh
-          </button>
-          <button onClick={()=>exportCSV(filtered,'audit-log.csv')}
-            style={{background:'#D4A017',color:'#fff',border:'none',borderRadius:7,
-              padding:'8px 16px',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'sans-serif'}}>
-            ⬇️ Export CSV
-          </button>
-        </div>
-      </div>
-
-      {/* Confidential warning */}
-      <div style={{background:'#FADBD8',border:'1px solid #C0392B',borderRadius:8,
-        padding:'10px 16px',marginBottom:16,fontSize:13,
-        fontFamily:'sans-serif',color:'#C0392B',fontWeight:700}}>
-        🔒 CONFIDENTIAL — Only visible to Founder. Records every action by every staff member.
-      </div>
-
       {/* KPIs */}
       <div style={{display:'flex',gap:12,flexWrap:'wrap',marginBottom:20}}>
-        <KPI label='Total Entries'   value={logs.length}/>
-        <KPI label="Today's Activity" value={todayLogs.length} color='#1A56DB' bg='#EBF5FB'/>
-        <KPI label='Total Logins'    value={loginCount}/>
-        <KPI label='Failed Actions'  value={failCount} color={failCount>0?'#C0392B':'#165C35'} bg={failCount>0?'#FADBD8':'#E8F5EE'}/>
-        <KPI label='Active Users'    value={uniqueUsers.length} color='#7D4E00' bg='#FDF6E3'/>
+        {[
+          ['Total Events',  logs.length,                                            '#165C35','#E8F5EE'],
+          ['Logins',        logs.filter(l=>l.action==='LOGIN').length,              '#165C35','#E8F5EE'],
+          ['Today',         logs.filter(l=>l.created_at?.startsWith(new Date().toISOString().slice(0,10))).length, '#1A56DB','#EBF5FB'],
+          ['Deletes',       logs.filter(l=>l.action==='DELETE').length,             '#C0392B','#FADBD8'],
+        ].map(([label,val,c,bg])=>(
+          <div key={label} style={{background:bg,borderRadius:12,padding:'14px 18px',
+            flex:1,minWidth:120,borderLeft:`4px solid ${c}`}}>
+            <div style={{fontSize:10,color:'#666',textTransform:'uppercase',letterSpacing:1,marginBottom:5,fontFamily:'sans-serif'}}>{label}</div>
+            <div style={{fontSize:22,fontWeight:800,color:c,fontFamily:'sans-serif'}}>{val}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Filters */}
-      <div style={{background:'#fff',borderRadius:12,border:'1px solid #C9C9C0',
-        padding:'16px 20px',marginBottom:16}}>
-        <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'center'}}>
-          <input value={search} onChange={e=>setSearch(e.target.value)}
-            placeholder='🔍 Search by name, module, or description...'
-            style={{flex:2,minWidth:200,border:'1px solid #C9C9C0',borderRadius:6,
-              padding:'8px 12px',fontSize:13,boxSizing:'border-box',fontFamily:'sans-serif'}}/>
-          <select value={filterAction} onChange={e=>setFilterAction(e.target.value)}
-            style={{flex:1,minWidth:140,border:'1px solid #C9C9C0',borderRadius:6,
-              padding:'8px 10px',fontSize:13,background:'#fff',fontFamily:'sans-serif'}}>
-            <option value='All'>All Actions</option>
-            {uniqueActions.map(a=><option key={a} value={a}>{a}</option>)}
-          </select>
-          <select value={filterUser} onChange={e=>setFilterUser(e.target.value)}
-            style={{flex:1,minWidth:140,border:'1px solid #C9C9C0',borderRadius:6,
-              padding:'8px 10px',fontSize:13,background:'#fff',fontFamily:'sans-serif'}}>
-            <option value='All'>All Staff</option>
-            {uniqueUsers.map(u=><option key={u} value={u}>{u}</option>)}
-          </select>
-          <button onClick={()=>{setSearch('');setFilterAction('All');setFilterUser('All');}}
-            style={{background:'transparent',color:'#888',border:'2px solid #C9C9C0',
-              borderRadius:7,padding:'8px 14px',fontWeight:700,fontSize:13,
-              cursor:'pointer',fontFamily:'sans-serif'}}>
-            Clear
-          </button>
-        </div>
-        <div style={{marginTop:10,fontSize:12,color:'#888',fontFamily:'sans-serif'}}>
-          Showing <strong>{filtered.length}</strong> of <strong>{logs.length}</strong> entries
-        </div>
-      </div>
-
-      {/* Table */}
+      {/* Card */}
       <div style={{background:'#fff',borderRadius:14,border:'1px solid #C9C9C0',overflow:'hidden'}}>
-        <div style={{background:'#1B2631',padding:'12px 20px'}}>
-          <span style={{color:'#D4A017',fontWeight:700,fontSize:14,fontFamily:'sans-serif'}}>
-            📋 Activity Log
+
+        {/* Header */}
+        <div style={{background:'#1F6F43',padding:'14px 20px',display:'flex',
+          justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}>
+          <span style={{color:'#fff',fontWeight:700,fontSize:15,fontFamily:'sans-serif'}}>
+            🔍 Audit Trail — All System Events
+          </span>
+          <span style={{color:'rgba(255,255,255,0.7)',fontSize:12,fontFamily:'sans-serif'}}>
+            {filtered.length} record{filtered.length!==1?'s':''} · timestamps in WAT (UTC+1)
           </span>
         </div>
+
+        {/* Filters */}
+        <div style={{padding:'14px 20px',borderBottom:'1px solid #eee',
+          display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+          <input
+            value={filter}
+            onChange={e=>{setFilter(e.target.value);setPage(1);}}
+            placeholder="Search by action, module, user, description…"
+            style={{flex:1,minWidth:200,border:'1px solid #C9C9C0',borderRadius:7,
+              padding:'8px 12px',fontSize:13,fontFamily:'sans-serif'}}
+          />
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {actionTypes.map(a=>(
+              <button key={a} onClick={()=>{setActionFilter(a);setPage(1);}}
+                style={{padding:'6px 12px',borderRadius:20,border:'none',cursor:'pointer',
+                  fontSize:11,fontWeight:700,fontFamily:'sans-serif',
+                  background:actionFilter===a?'#1F6F43':'#eee',
+                  color:actionFilter===a?'#fff':'#555'}}>
+                {a}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Table */}
         <div style={{overflowX:'auto'}}>
           {loading ? (
             <div style={{padding:40,textAlign:'center',color:'#888',fontFamily:'sans-serif'}}>
-              <div style={{fontSize:30,marginBottom:8}}>🔄</div>
-              Loading audit log...
+              ⏳ Loading audit events…
             </div>
-          ) : filtered.length===0 ? (
+          ) : error ? (
+            <div style={{padding:40,textAlign:'center',color:'#C0392B',fontFamily:'sans-serif'}}>⚠️ {error}</div>
+          ) : paginated.length === 0 ? (
             <div style={{padding:40,textAlign:'center',color:'#888',fontFamily:'sans-serif'}}>
-              <div style={{fontSize:30,marginBottom:8}}>📋</div>
-              No entries match your filter.
+              No audit events found.
             </div>
           ) : (
-            <table style={{width:'100%',borderCollapse:'collapse',minWidth:800}}>
-              <thead><tr>
-                <TH>Time & Date</TH>
-                <TH>Staff Member</TH>
-                <TH>Action</TH>
-                <TH>Module</TH>
-                <TH>Description</TH>
-                <TH>Device</TH>
-                <TH>Status</TH>
-              </tr></thead>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+              <thead>
+                <tr>
+                  {['#','Date & Time (WAT)','Time Ago','Action','Module','Description','User'].map(h=>(
+                    <th key={h} style={{background:'#165C35',color:'#fff',padding:'10px 14px',
+                      textAlign:'left',fontSize:11,textTransform:'uppercase',whiteSpace:'nowrap',
+                      fontFamily:'sans-serif'}}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
               <tbody>
-                {filtered.map((log,i)=>(
-                  <tr key={log.id} style={{background:i%2===0?'#F9F9F7':'#fff'}}>
-                    <td style={{padding:'10px 12px',fontFamily:'sans-serif',
-                      fontSize:12,color:'#666',whiteSpace:'nowrap'}}>
-                      {formatTime(log.created_at)}
+                {paginated.map((l, i) => (
+                  <tr key={l.id||i} style={{background:i%2===0?'#F9F9F7':'#fff',
+                    borderBottom:'1px solid #f0f0ec'}}>
+                    <td style={{padding:'10px 14px',color:'#bbb',fontSize:11,fontFamily:'sans-serif'}}>
+                      {(page-1)*PER_PAGE + i + 1}
                     </td>
-                    <td style={{padding:'10px 12px'}}>
-                      <div style={{fontFamily:'sans-serif',fontSize:13,
-                        fontWeight:700,color:'#165C35'}}>{log.user_name}</div>
-                      <div style={{fontFamily:'sans-serif',fontSize:11,color:'#888'}}>
-                        {log.user_email}
-                      </div>
+                    {/* Timestamp — full date + time */}
+                    <td style={{padding:'10px 14px',fontFamily:'monospace',fontSize:12,
+                      whiteSpace:'nowrap',color:'#333',fontWeight:600}}>
+                      {fmtTime(l.created_at)}
                     </td>
-                    <td style={{padding:'10px 12px'}}>
-                      {actionIcon(log.action)}{' '}
-                      <Badge label={log.action} color={actionColor(log.action)}/>
+                    {/* Relative time */}
+                    <td style={{padding:'10px 14px',fontSize:11,color:'#aaa',
+                      fontFamily:'sans-serif',whiteSpace:'nowrap'}}>
+                      {timeAgo(l.created_at)}
                     </td>
-                    <td style={{padding:'10px 12px',fontFamily:'sans-serif',
-                      fontSize:13,color:'#1A56DB',fontWeight:600}}>
-                      {log.module||'—'}
+                    <td style={{padding:'10px 14px'}}>
+                      <ActionBadge action={l.action}/>
                     </td>
-                    <td style={{padding:'10px 12px',fontFamily:'sans-serif',
-                      fontSize:12,color:'#444',maxWidth:280}}>
-                      {log.description||'—'}
+                    <td style={{padding:'10px 14px',fontFamily:'sans-serif',fontSize:12,
+                      color:'#555',fontWeight:600}}>
+                      {l.module||'—'}
                     </td>
-                    <td style={{padding:'10px 12px'}}>
-                      <Badge label={log.device==='Mobile'?'📱 Mobile':'💻 Desktop'}
-                        color={log.device==='Mobile'?'amber':'blue'}/>
+                    <td style={{padding:'10px 14px',fontFamily:'sans-serif',fontSize:13,
+                      color:'#333',maxWidth:340,wordBreak:'break-word'}}>
+                      {l.description||'—'}
                     </td>
-                    <td style={{padding:'10px 12px'}}>
-                      <Badge label={log.status||'Success'}
-                        color={log.status==='Failed'?'red':'green'}/>
+                    <td style={{padding:'10px 14px',fontFamily:'sans-serif',fontSize:12,
+                      fontWeight:700,color:'#165C35',whiteSpace:'nowrap'}}>
+                      {l.user_name||'—'}
                     </td>
                   </tr>
                 ))}
@@ -230,6 +214,32 @@ export default function AuditLog({ currentUser }) {
             </table>
           )}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{padding:'14px 20px',borderTop:'1px solid #eee',display:'flex',
+            gap:8,alignItems:'center',justifyContent:'center',flexWrap:'wrap'}}>
+            <button onClick={()=>setPage(1)} disabled={page===1}
+              style={{padding:'6px 12px',borderRadius:7,border:'1px solid #C9C9C0',
+                background:page===1?'#f5f5f5':'#fff',cursor:page===1?'default':'pointer',
+                fontSize:12,fontFamily:'sans-serif'}}>« First</button>
+            <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
+              style={{padding:'6px 12px',borderRadius:7,border:'1px solid #C9C9C0',
+                background:page===1?'#f5f5f5':'#fff',cursor:page===1?'default':'pointer',
+                fontSize:12,fontFamily:'sans-serif'}}>‹ Prev</button>
+            <span style={{fontSize:12,color:'#888',fontFamily:'sans-serif',padding:'0 8px'}}>
+              Page {page} of {totalPages} ({filtered.length} events)
+            </span>
+            <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}
+              style={{padding:'6px 12px',borderRadius:7,border:'1px solid #C9C9C0',
+                background:page===totalPages?'#f5f5f5':'#fff',cursor:page===totalPages?'default':'pointer',
+                fontSize:12,fontFamily:'sans-serif'}}>Next ›</button>
+            <button onClick={()=>setPage(totalPages)} disabled={page===totalPages}
+              style={{padding:'6px 12px',borderRadius:7,border:'1px solid #C9C9C0',
+                background:page===totalPages?'#f5f5f5':'#fff',cursor:page===totalPages?'default':'pointer',
+                fontSize:12,fontFamily:'sans-serif'}}>Last »</button>
+          </div>
+        )}
       </div>
     </div>
   );

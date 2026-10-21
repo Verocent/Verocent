@@ -35,6 +35,7 @@ export default function Home() {
   const [sidebarOpen,  setSidebarOpen]  = useState(true);
   const [loading,      setLoading]      = useState(true);
   const [dbError,      setDbError]      = useState(null);
+  const [session,      setSession]      = useState(null); // logged-in user
 
   // ── Inactivity / auto-logout state ────────────────────────
   const [locked,       setLocked]       = useState(false);
@@ -142,6 +143,19 @@ export default function Home() {
     setLoading(false);
   }, []);
 
+  // ── Session check: redirect to login if not signed in ────
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('verocent_session');
+      if (!raw) { window.location.href = '/login'; return; }
+      const s = JSON.parse(raw);
+      if (!s?.username) { window.location.href = '/login'; return; }
+      setSession(s);
+    } catch {
+      window.location.href = '/login';
+    }
+  }, []);
+
   useEffect(() => { loadAllData(); }, [loadAllData]);
 
   // ── Inactivity / Auto-logout logic ────────────────────────
@@ -233,7 +247,28 @@ export default function Home() {
               marginBottom:12}}>
             {lockPin ? '🔓 Unlock' : '▶ Continue'}
           </button>
-          <button onClick={() => window.location.href = '/login'}
+          <button onClick={async () => {
+              try {
+                const { createClient } = await import('@supabase/supabase-js');
+                const sb = createClient(
+                  process.env.NEXT_PUBLIC_SUPABASE_URL,
+                  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+                );
+                const raw = localStorage.getItem('verocent_session');
+                const s = raw ? JSON.parse(raw) : null;
+                if (s) {
+                  await sb.from('audit_logs').insert({
+                    action:      'LOGOUT',
+                    module:      'Auth',
+                    description: `${s.name} (${s.role}) signed out from lock screen`,
+                    user_name:   s.name,
+                    created_at:  new Date().toISOString(),
+                  }).catch(()=>{});
+                }
+              } catch {}
+              localStorage.removeItem('verocent_session');
+              window.location.href = '/login';
+            }}
             style={{background:'none',border:'none',color:'#999',fontSize:12,cursor:'pointer',
               fontFamily:'sans-serif',textDecoration:'underline'}}>
             Sign out instead
@@ -347,6 +382,40 @@ export default function Home() {
                 fontSize:12,fontWeight:700,cursor:'pointer',color:'#7D4E00'}}>
               🔒 Lock
             </button>
+            {/* Logged-in user + Logout */}
+            {session && (
+              <div style={{display:'flex',alignItems:'center',gap:8,
+                background:'#F4F3EE',border:'1px solid #C9C9C0',borderRadius:8,padding:'5px 12px'}}>
+                <span style={{fontSize:12,color:'#555'}}>
+                  👤 <strong style={{color:'#165C35'}}>{session.name}</strong>
+                  <span style={{color:'#aaa',marginLeft:4,textTransform:'capitalize'}}>({session.role})</span>
+                </span>
+                <button
+                  onClick={async () => {
+                    if (!window.confirm('Sign out of Verocent ERP?')) return;
+                    try {
+                      const { createClient } = await import('@supabase/supabase-js');
+                      const sb = createClient(
+                        process.env.NEXT_PUBLIC_SUPABASE_URL,
+                        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+                      );
+                      await sb.from('audit_logs').insert({
+                        action:      'LOGOUT',
+                        module:      'Auth',
+                        description: `${session.name} (${session.role}) signed out`,
+                        user_name:   session.name,
+                        created_at:  new Date().toISOString(),
+                      }).catch(()=>{});
+                    } catch {}
+                    localStorage.removeItem('verocent_session');
+                    window.location.href = '/login';
+                  }}
+                  style={{background:'#FADBD8',border:'1px solid #C0392B',borderRadius:6,
+                    padding:'4px 10px',fontSize:11,fontWeight:700,cursor:'pointer',color:'#C0392B'}}>
+                  🚪 Sign Out
+                </button>
+              </div>
+            )}
             <div style={{fontSize:12,color:'#888'}}>
               {new Date().toLocaleDateString('en-NG',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}
             </div>
