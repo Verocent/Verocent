@@ -144,12 +144,13 @@ export default function Home() {
   }, []);
 
   // ── Session check: redirect to login if not signed in ────
+    // ── Session check: redirect to login if not signed in ────
   useEffect(() => {
     try {
       const raw = localStorage.getItem('verocent_session');
       if (!raw) { window.location.href = '/login'; return; }
       const s = JSON.parse(raw);
-      if (!s?.username) { window.location.href = '/login'; return; }
+      if (!s?.staff_id) { window.location.href = '/login'; return; }
       setSession(s);
     } catch {
       window.location.href = '/login';
